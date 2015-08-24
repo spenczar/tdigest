@@ -1,6 +1,7 @@
 package tdigest
 
 import (
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -162,29 +163,34 @@ func TestQuantileValue(t *testing.T) {
 
 	cset := &centroidSet{
 		accuracy:   1,
-		countTotal: 4,
-		centroids:  []*centroid{{0, 1}, {1, 1}, {2, 1}, {3, 1}},
+		countTotal: 8,
+		centroids:  []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}},
 	}
 	type testcase struct {
 		q    float64
 		want float64
 	}
 
+	// correct values, determined by hand with pen and paper
 	testcases := []testcase{
-		{0.000, 0.0},
-		{0.125, 0.0},
-		{0.250, 1.0},
-		{0.375, 1.5},
-		{0.500, 2.0},
-		{0.625, 2.5},
-		{0.750, 3.0},
-		{0.875, 3.5},
-		{1.000, 4.0},
+		{0.0, 5.0 / 40.0},
+		{0.1, 13.0 / 40.0},
+		{0.2, 21.0 / 40.0},
+		{0.3, 29.0 / 40.0},
+		{0.4, 37.0 / 40.0},
+		{0.5, 20.0 / 15.0},
+		{0.6, 28.0 / 15.0},
+		{0.7, 36.0 / 15.0},
+		{0.8, 44.0 / 15.0},
+		{0.9, 13.0 / 2.0},
+		{1.0, 21.0 / 2.0},
 	}
+
+	var epsilon = 1e-8
 
 	for i, tc := range testcases {
 		have := cset.quantileValue(tc.q)
-		if have != tc.want {
+		if math.Abs(have-tc.want) > epsilon {
 			t.Errorf("centroidSet.quantileValue wrong step=%d, have=%v, want=%v", i, have, tc.want)
 		}
 	}

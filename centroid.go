@@ -162,34 +162,55 @@ func (cs *centroidSet) quantile(idx int) float64 {
 }
 
 func (cs *centroidSet) quantileValue(q float64) float64 {
+	var n = len(cs.centroids)
+	if n == 0 {
+		return math.NaN()
+	}
+	if n == 1 {
+		return cs.centroids[0].mean
+	}
+
+	if q < 0 {
+		q = 0
+	} else if q > 1 {
+		q = 1
+	}
+
+	// rescale into count units instead of 0 to 1 units
+	q = float64(cs.countTotal) * q
+	// find the first centroid which straddles q
 	var (
-		qtile        float64
-		qtileIdx     int
-		lastQtile    float64
-		lastQtileIdx int
+		qTotal float64 = 0
+		i      int
 	)
-	if q == 1 {
-		c1 := cs.centroids[len(cs.centroids)-1]
-		c0 := cs.centroids[len(cs.centroids)-2]
-		return c1.mean + (c1.mean - c0.mean)
+	for i = 0; i < n && float64(cs.centroids[i].count)/2+qTotal < q; i++ {
+		qTotal += float64(cs.centroids[i].count)
 	}
-	total := 0
-	for i, c := range cs.centroids {
-		total += c.count
-		qtile = (float64(c.count-1)/2 + float64(total)) / float64(cs.countTotal)
-		qtileIdx = i
-		if qtile > q {
-			log.Printf("believe qtile %f to be between %d and %d (qtiles %f and %f, valus %f and %f)", q, lastQtileIdx, qtileIdx, lastQtile, qtile, cs.centroids[lastQtileIdx].mean, cs.centroids[qtileIdx].mean)
-			break
-		}
-		lastQtile = qtile
-		lastQtileIdx = qtileIdx
+
+	if i == 0 {
+		// special case 1: the targeted quantile is before the
+		// left-most centroid. extrapolate from the slope from
+		// centroid0 to centroid1.
+		c0 := cs.centroids[0]
+		c1 := cs.centroids[1]
+		slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
+		deltaQ := q - float64(c0.count)/2 // this is negative
+		return c0.mean + slope*deltaQ
 	}
-	// interpolate between the two values
-	delta := cs.centroids[qtileIdx].mean - cs.centroids[lastQtileIdx].mean
-	log.Printf("delta means: %f", delta)
-	delta *= (q - lastQtile) / (qtile - lastQtile)
-	log.Printf("delta qtiles: %f", delta)
-	log.Printf("adding %f to %f", delta, cs.centroids[qtileIdx].mean)
-	return cs.centroids[qtileIdx].mean + delta
+	if i == n {
+		// special case 2: the targeted quantile is from the
+		// right-most centroid. extrapolate from the slope at the
+		// right edge.
+		c0 := cs.centroids[n-2]
+		c1 := cs.centroids[n-1]
+		slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
+		deltaQ := q - (qTotal - float64(c1.count)/2)
+		return c1.mean + slope*deltaQ
+	}
+	// common case: targeted quantile is between 2 centroids
+	c0 := cs.centroids[i-1]
+	c1 := cs.centroids[i]
+	slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
+	deltaQ := q - (float64(c1.count)/2 + qTotal)
+	return c1.mean + slope*deltaQ
 }
