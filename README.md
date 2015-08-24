@@ -1,4 +1,5 @@
 # tdigest #
+[![GoDoc](https://godoc.org/github.com/spenczar/tdigest?status.svg)](https://godoc.org/github.com/spenczar/tdigest)
 
 This is a Go implementation of Ted Dunning's
 [t-digest](https://github.com/tdunning/t-digest). It's pretty
