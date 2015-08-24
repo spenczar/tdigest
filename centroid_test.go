@@ -235,7 +235,7 @@ func benchmarkAdd(b *testing.B, n int, src valueSource) {
 		cset.addValue(valsToAdd[i%n], 1)
 	}
 	b.StopTimer()
-	b.Logf("ending size: %d, total weight: %d", len(cset.centroids), cset.countTotal)
+	b.Logf("%d data points compresses to %d centroids", cset.countTotal, len(cset.centroids))
 }
 
 func BenchmarkAdd_1k_Ordered(b *testing.B) {
