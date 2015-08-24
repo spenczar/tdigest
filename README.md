@@ -1,5 +1,5 @@
 # tdigest #
-[![GoDoc](https://godoc.org/github.com/spenczar/tdigest?status.svg)](https://godoc.org/github.com/spenczar/tdigest)
+[![GoDoc](https://godoc.org/github.com/spenczar/tdigest?status.svg)](https://godoc.org/github.com/spenczar/tdigest) [![Build Status](https://travis-ci.org/spenczar/tdigest.svg)](https://travis-ci.org/spenczar/tdigest)
 
 This is a Go implementation of Ted Dunning's
 [t-digest](https://github.com/tdunning/t-digest). It's pretty
