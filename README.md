@@ -23,3 +23,8 @@ In general, adding a datapoint takes about 1 to 4 microseconds on my
 2014 Macbook Pro. This is fast enough for many purposes, but if you
 have any concern, you should just run the benchmarks on your targeted
 syste. You can do that with `go test -bench . ./...`.
+
+Quantiles are very, very quick to calculate, and typically take tens
+of nanoseconds. They might take up to a few hundred nanoseconds for
+large, poorly compressed (read: ordered) datasets, but in general, you
+don't have to worry about the speed of calls to Quantile.

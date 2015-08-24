@@ -7,13 +7,35 @@ import (
 	"math/rand"
 )
 
+// A TDigest is an efficient data structure for computing streaming
+// approximate quantiles of a dataset. It supports two methods:
+//
+// Add will add a value to the TDigest, updating all quantiles. A
+// weight can be specified; use weight of 1 if you don't care about
+// weighting your dataset.
+//
+// Quantile(q) will estimate the qth quantile value of the
+// dataset. The input value of q should be in the range [0.0, 1.0]; if
+// it is outside that range, it will be clipped into it automatically.
+//
+// Calling Quantile on a TDigest with no data should return NaN.
+type TDigest interface {
+	Add(val float64, weight int)
+	Quantile(q float64) (val float64)
+}
+
+func NewTDigest(compression float64) TDigest {
+	return newCentroidSet(compression)
+}
+
+// centroid is a simple container for a mean,count pair.
 type centroid struct {
 	mean  float64
 	count int
 }
 
 func (c *centroid) String() string {
-	return fmt.Sprintf("c{%dx @ %f}", c.count, c.mean)
+	return fmt.Sprintf("c{%f x%d}", c.mean, c.count)
 }
 
 type centroidSet struct {
@@ -24,51 +46,12 @@ type centroidSet struct {
 	reclusterAt int
 }
 
-// create a new centroid set. 100.0 is a reasonable value for compression.
 func newCentroidSet(compression float64) *centroidSet {
 	return &centroidSet{
 		centroids:   make([]*centroid, 0),
 		compression: compression,
 		countTotal:  0,
-		reclusterAt: 4,
 	}
-}
-
-func (cs *centroidSet) String() string {
-	out := "["
-	for i, c := range cs.centroids {
-		out += fmt.Sprintf("c[%f x%d]  limit=%d  ptile=%f\n", c.mean, c.count, cs.weightLimit(i), cs.quantile(i))
-	}
-	out += "]"
-	return out
-}
-
-// run all centroids through the adding algorithm, which tends to
-// shrink the number of clusters without much data loss
-func (cs *centroidSet) recluster() {
-	if true {
-		return
-	}
-	log.Printf("recluster start from %d", len(cs.centroids))
-	cCopy := make([]*centroid, len(cs.centroids))
-	copy(cCopy, cs.centroids)
-
-	// shuffle the order of the copy
-	for i := range cCopy {
-		j := rand.Intn(i + 1)
-		cCopy[i], cCopy[j] = cCopy[j], cCopy[i]
-	}
-	log.Printf("preshuffle from %d: %v", len(cs.centroids), cs)
-	cs.centroids = cCopy
-	log.Printf("shuffled from %d: %v", len(cs.centroids), cs)
-
-	cs.centroids = make([]*centroid, 0)
-	cs.countTotal = 0
-	for _, c := range cCopy {
-		cs.addValue(c.mean, c.count)
-	}
-	cs.reclusterAt *= 2
-	log.Printf("recluster - size went from %d to %d, total weight=%d", len(cCopy), len(cs.centroids), cs.countTotal)
 }
 
 // Find the indexes of centroids which have the minimum distance to the
@@ -112,7 +95,7 @@ func (cs *centroidSet) nearest(val float64) []int {
 
 // returns the maximum weight that can be placed at specified index
 func (cs *centroidSet) weightLimit(idx int) int {
-	ptile := cs.quantile(idx)
+	ptile := cs.quantileOf(idx)
 	limit := int(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
 	return limit
 }
@@ -161,7 +144,8 @@ func (cs *centroidSet) addNewCentroid(mean float64, weight int) {
 	cs.centroids[idx] = &centroid{mean, weight}
 }
 
-func (cs *centroidSet) addValue(val float64, weight int) {
+// Add a value to the centroidSet.
+func (cs *centroidSet) Add(val float64, weight int) {
 	cs.countTotal += weight
 	var idx = cs.findAddTarget(val)
 
@@ -188,20 +172,17 @@ func (cs *centroidSet) addValue(val float64, weight int) {
 		c.count += add
 		c.mean = c.mean + float64(add)*(val-c.mean)/float64(c.count)
 
-		cs.addValue(val, remainder)
+		cs.Add(val, remainder)
 	} else {
 		c.count += weight
 		c.mean = c.mean + float64(weight)*(val-c.mean)/float64(c.count)
 	}
 
-	if len(cs.centroids) >= cs.reclusterAt {
-		cs.recluster()
-	}
 }
 
 // returns the approximate quantile that a particular centroid
 // represents
-func (cs *centroidSet) quantile(idx int) float64 {
+func (cs *centroidSet) quantileOf(idx int) float64 {
 	total := 0
 	for _, c := range cs.centroids[:idx] {
 		total += c.count
@@ -209,9 +190,9 @@ func (cs *centroidSet) quantile(idx int) float64 {
 	return (float64(cs.centroids[idx].count/2) + float64(total)) / float64(cs.countTotal)
 }
 
-// returns the approximate value of a quantile (eg the 99th percentile
-// value would be centroidSet.quantileValue(0.99))
-func (cs *centroidSet) quantileValue(q float64) float64 {
+// Quantile returns the approximate value at a quantile (eg the 99th
+// percentile value would be centroidSet.quantileValue(0.99))
+func (cs *centroidSet) Quantile(q float64) float64 {
 	var n = len(cs.centroids)
 	if n == 0 {
 		return math.NaN()

@@ -128,7 +128,7 @@ func TestQuantile(t *testing.T) {
 
 	for i, tc := range testcases {
 		cset := csetFromWeights(tc.weights)
-		have := cset.quantile(tc.idx)
+		have := cset.quantileOf(tc.idx)
 		if have != tc.want {
 			t.Errorf("centroidSet.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
 		}
@@ -152,7 +152,7 @@ func TestAddValue(t *testing.T) {
 
 	cset := newCentroidSet(1)
 	for i, tc := range testcases {
-		cset.addValue(tc.value, tc.weight)
+		cset.Add(tc.value, tc.weight)
 		if !reflect.DeepEqual(cset.centroids, tc.want) {
 			t.Fatalf("centroidSet.addValue unexpected state step=%d, have=%v, want=%v", i, cset.centroids, tc.want)
 		}
@@ -187,9 +187,9 @@ func TestQuantileValue(t *testing.T) {
 	var epsilon = 1e-8
 
 	for i, tc := range testcases {
-		have := cset.quantileValue(tc.q)
+		have := cset.Quantile(tc.q)
 		if math.Abs(have-tc.want) > epsilon {
-			t.Errorf("centroidSet.quantileValue wrong step=%d, have=%v, want=%v",
+			t.Errorf("centroidSet.Quantile wrong step=%d, have=%v, want=%v",
 				i, have, tc.want)
 		}
 	}
@@ -227,15 +227,31 @@ func benchmarkAdd(b *testing.B, n int, src valueSource) {
 	for i := 0; i < n; i++ {
 		v := src.Next()
 		valsToAdd[i] = v
-		cset.addValue(v, 1)
+		cset.Add(v, 1)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cset.addValue(valsToAdd[i%n], 1)
+		cset.Add(valsToAdd[i%n], 1)
 	}
 	b.StopTimer()
-	b.Logf("%d data points compresses to %d centroids", cset.countTotal, len(cset.centroids))
+}
+
+func benchmarkQuantile(b *testing.B, n int, src valueSource) {
+	quantilesToCheck := make([]float64, n)
+
+	cset := newCentroidSet(100)
+	for i := 0; i < n; i++ {
+		v := src.Next()
+		quantilesToCheck[i] = v
+		cset.Add(v, 1)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = cset.Quantile(quantilesToCheck[i%n])
+	}
+	b.StopTimer()
 }
 
 func BenchmarkAdd_1k_Ordered(b *testing.B) {
@@ -248,6 +264,18 @@ func BenchmarkAdd_10k_Ordered(b *testing.B) {
 
 func BenchmarkAdd_100k_Ordered(b *testing.B) {
 	benchmarkAdd(b, 100000, &orderedValues{})
+}
+
+func BenchmarkQuantile_1k_Ordered(b *testing.B) {
+	benchmarkQuantile(b, 1000, &orderedValues{})
+}
+
+func BenchmarkQuantile_10k_Ordered(b *testing.B) {
+	benchmarkQuantile(b, 10000, &orderedValues{})
+}
+
+func BenchmarkQuantile_100k_Ordered(b *testing.B) {
+	benchmarkQuantile(b, 100000, &orderedValues{})
 }
 
 type zipfValues struct {
@@ -278,6 +306,18 @@ func BenchmarkAdd_100k_Zipfian(b *testing.B) {
 	benchmarkAdd(b, 100000, newZipfValues())
 }
 
+func BenchmarkQuantile_1k_Zipfian(b *testing.B) {
+	benchmarkQuantile(b, 1000, newZipfValues())
+}
+
+func BenchmarkQuantile_10k_Zipfian(b *testing.B) {
+	benchmarkQuantile(b, 10000, newZipfValues())
+}
+
+func BenchmarkQuantile_100k_Zipfian(b *testing.B) {
+	benchmarkQuantile(b, 100000, newZipfValues())
+}
+
 type uniformValues struct {
 	r *rand.Rand
 }
@@ -300,6 +340,18 @@ func BenchmarkAdd_10k_Uniform(b *testing.B) {
 
 func BenchmarkAdd_100k_Uniform(b *testing.B) {
 	benchmarkAdd(b, 100000, newUniformValues())
+}
+
+func BenchmarkQuantile_1k_Uniform(b *testing.B) {
+	benchmarkQuantile(b, 1000, newUniformValues())
+}
+
+func BenchmarkQuantile_10k_Uniform(b *testing.B) {
+	benchmarkQuantile(b, 10000, newUniformValues())
+}
+
+func BenchmarkQuantile_100k_Uniform(b *testing.B) {
+	benchmarkQuantile(b, 100000, newUniformValues())
 }
 
 type normalValues struct {
@@ -326,11 +378,23 @@ func BenchmarkAdd_100k_Normal(b *testing.B) {
 	benchmarkAdd(b, 100000, newNormalValues())
 }
 
+func BenchmarkQuantile_1k_Normal(b *testing.B) {
+	benchmarkQuantile(b, 1000, newNormalValues())
+}
+
+func BenchmarkQuantile_10k_Normal(b *testing.B) {
+	benchmarkQuantile(b, 10000, newNormalValues())
+}
+
+func BenchmarkQuantile_100k_Normal(b *testing.B) {
+	benchmarkQuantile(b, 100000, newNormalValues())
+}
+
 // add the values [0,n) to a centroid set, equal weights
 func simpleCentroidSet(n int) *centroidSet {
 	cset := newCentroidSet(1.0)
 	for i := 0; i < n; i++ {
-		cset.addValue(float64(i), 1)
+		cset.Add(float64(i), 1)
 	}
 	return cset
 }
