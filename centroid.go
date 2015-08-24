@@ -2,7 +2,6 @@ package tdigest
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 )
@@ -64,9 +63,7 @@ func (cs *centroidSet) nearest(val float64) []int {
 // returns the maximum weight that can be placed at specified index
 func (cs *centroidSet) weightLimit(idx int) int {
 	ptile := cs.quantile(idx)
-	log.Printf("ptile at %d is %f", idx, ptile)
 	limit := int(4*cs.accuracy*ptile*(1-ptile)) * len(cs.centroids)
-	log.Printf("weight limit at %d is %d", idx, limit)
 	return limit
 }
 
@@ -86,16 +83,12 @@ func (cs *centroidSet) findAddTarget(val float64) int {
 		// if there is room for more weight at this centroid...
 		if cs.centroidHasRoom(c) {
 			nMatch += 1
-			log.Printf("room found at %d for %f. nmatch", c, val)
 			// ... and it passes a random filter...
 			r := rand.Intn(nMatch)
 
 			if r == 0 {
 				// ... then add it here
-				log.Printf("random draw success")
 				addTo = c
-			} else {
-				log.Printf("random draw fail: r=%f", r)
 			}
 		}
 	}
