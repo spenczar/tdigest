@@ -171,7 +171,7 @@ func TestQuantileValue(t *testing.T) {
 		want float64
 	}
 
-	// correct values, determined by hand with pen and paper
+	// correct values, determined by hand with pen and paper for this set of centroids
 	testcases := []testcase{
 		{0.0, 5.0 / 40.0},
 		{0.1, 13.0 / 40.0},
@@ -191,7 +191,8 @@ func TestQuantileValue(t *testing.T) {
 	for i, tc := range testcases {
 		have := cset.quantileValue(tc.q)
 		if math.Abs(have-tc.want) > epsilon {
-			t.Errorf("centroidSet.quantileValue wrong step=%d, have=%v, want=%v", i, have, tc.want)
+			t.Errorf("centroidSet.quantileValue wrong step=%d, have=%v, want=%v",
+				i, have, tc.want)
 		}
 	}
 }
