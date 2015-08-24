@@ -2,6 +2,7 @@ package tdigest
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 )
@@ -16,9 +17,58 @@ func (c *centroid) String() string {
 }
 
 type centroidSet struct {
-	centroids  []*centroid
-	accuracy   float64
-	countTotal int
+	centroids   []*centroid
+	compression float64
+	countTotal  int
+
+	reclusterAt int
+}
+
+// create a new centroid set. 100.0 is a reasonable value for compression.
+func newCentroidSet(compression float64) *centroidSet {
+	return &centroidSet{
+		centroids:   make([]*centroid, 0),
+		compression: compression,
+		countTotal:  0,
+		reclusterAt: 4,
+	}
+}
+
+func (cs *centroidSet) String() string {
+	out := "["
+	for i, c := range cs.centroids {
+		out += fmt.Sprintf("c[%f x%d]  limit=%d  ptile=%f\n", c.mean, c.count, cs.weightLimit(i), cs.quantile(i))
+	}
+	out += "]"
+	return out
+}
+
+// run all centroids through the adding algorithm, which tends to
+// shrink the number of clusters without much data loss
+func (cs *centroidSet) recluster() {
+	if true {
+		return
+	}
+	log.Printf("recluster start from %d", len(cs.centroids))
+	cCopy := make([]*centroid, len(cs.centroids))
+	copy(cCopy, cs.centroids)
+
+	// shuffle the order of the copy
+	for i := range cCopy {
+		j := rand.Intn(i + 1)
+		cCopy[i], cCopy[j] = cCopy[j], cCopy[i]
+	}
+	log.Printf("preshuffle from %d: %v", len(cs.centroids), cs)
+	cs.centroids = cCopy
+	log.Printf("shuffled from %d: %v", len(cs.centroids), cs)
+
+	cs.centroids = make([]*centroid, 0)
+	cs.countTotal = 0
+	for _, c := range cCopy {
+		cs.addValue(c.mean, c.count)
+	}
+	cs.reclusterAt *= 2
+	log.Printf("recluster - size went from %d to %d, total weight=%d", len(cCopy), len(cs.centroids), cs.countTotal)
 }
 
 // Find the indexes of centroids which have the minimum distance to the
@@ -63,7 +113,7 @@ func (cs *centroidSet) nearest(val float64) []int {
 // returns the maximum weight that can be placed at specified index
 func (cs *centroidSet) weightLimit(idx int) int {
 	ptile := cs.quantile(idx)
-	limit := int(4*cs.accuracy*ptile*(1-ptile)) * len(cs.centroids)
+	limit := int(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
 	return limit
 }
 
@@ -127,6 +177,7 @@ func (cs *centroidSet) addValue(val float64, weight int) {
 	// if adding this node to this centroid would put it over the
 	// weight limit, just add the most we can and recur with the remainder
 	if c.count+weight > limit {
+		log.Printf("splitting value %f weight=%d", val, weight)
 		add := limit - c.count
 		if add < 0 {
 			// this node was already overweight
@@ -142,6 +193,10 @@ func (cs *centroidSet) addValue(val float64, weight int) {
 		c.count += weight
 		c.mean = c.mean + float64(weight)*(val-c.mean)/float64(c.count)
 	}
+
+	if len(cs.centroids) >= cs.reclusterAt {
+		cs.recluster()
+	}
 }
 
 // returns the approximate quantile that a particular centroid
@@ -154,6 +209,8 @@ func (cs *centroidSet) quantile(idx int) float64 {
 	return (float64(cs.centroids[idx].count/2) + float64(total)) / float64(cs.countTotal)
 }
 
+// returns the approximate value of a quantile (eg the 99th percentile
+// value would be centroidSet.quantileValue(0.99))
 func (cs *centroidSet) quantileValue(q float64) float64 {
 	var n = len(cs.centroids)
 	if n == 0 {

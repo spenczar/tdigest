@@ -150,7 +150,7 @@ func TestAddValue(t *testing.T) {
 		{4.0, 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
 	}
 
-	cset := &centroidSet{accuracy: 1}
+	cset := newCentroidSet(1)
 	for i, tc := range testcases {
 		cset.addValue(tc.value, tc.weight)
 		if !reflect.DeepEqual(cset.centroids, tc.want) {
@@ -160,12 +160,10 @@ func TestAddValue(t *testing.T) {
 }
 
 func TestQuantileValue(t *testing.T) {
+	cset := newCentroidSet(1)
+	cset.countTotal = 8
+	cset.centroids = []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}}
 
-	cset := &centroidSet{
-		accuracy:   1,
-		countTotal: 8,
-		centroids:  []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}},
-	}
 	type testcase struct {
 		q    float64
 		want float64
@@ -209,127 +207,128 @@ func BenchmarkFindAddTarget(b *testing.B) {
 	}
 }
 
-func BenchmarkAdd_1k_UniformRandom(b *testing.B) {
-	n := 1000
-	valsToAdd := make([]float64, n)
-
-	r := rand.New(rand.NewSource(rngSeed))
-
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = r.Float64()
-	}
-	cset := &centroidSet{}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
-		cset.addValue(valsToAdd[i%n], 1)
-	}
+type valueSource interface {
+	Next() float64
 }
 
-func BenchmarkAdd_100k_UniformRandom(b *testing.B) {
-	n := 100000
+type orderedValues struct {
+	last float64
+}
+
+func (ov *orderedValues) Next() float64 {
+	ov.last += 1
+	return ov.last
+}
+
+func benchmarkAdd(b *testing.B, n int, src valueSource) {
 	valsToAdd := make([]float64, n)
 
-	r := rand.New(rand.NewSource(rngSeed))
-
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = r.Float64()
+	cset := newCentroidSet(100)
+	for i := 0; i < n; i++ {
+		v := src.Next()
+		valsToAdd[i] = v
+		cset.addValue(v, 1)
 	}
-	cset := &centroidSet{}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
 		cset.addValue(valsToAdd[i%n], 1)
 	}
+	b.StopTimer()
+	b.Logf("ending size: %d, total weight: %d", len(cset.centroids), cset.countTotal)
 }
 
 func BenchmarkAdd_1k_Ordered(b *testing.B) {
-	n := 1000
-	valsToAdd := make([]float64, n)
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = float64(i)
-	}
-	cset := &centroidSet{}
+	benchmarkAdd(b, 1000, &orderedValues{})
+}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
-		cset.addValue(valsToAdd[i%n], 1)
-	}
+func BenchmarkAdd_10k_Ordered(b *testing.B) {
+	benchmarkAdd(b, 10000, &orderedValues{})
 }
 
 func BenchmarkAdd_100k_Ordered(b *testing.B) {
-	n := 100000
-	valsToAdd := make([]float64, n)
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = float64(i)
-	}
-	cset := &centroidSet{}
+	benchmarkAdd(b, 100000, &orderedValues{})
+}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
-		cset.addValue(valsToAdd[i%n], 1)
+type zipfValues struct {
+	z *rand.Zipf
+}
+
+func newZipfValues() *zipfValues {
+	r := rand.New(rand.NewSource(rngSeed))
+	z := rand.NewZipf(r, 1.2, 1, 1024*1024)
+	return &zipfValues{
+		z: z,
 	}
+}
+
+func (zv *zipfValues) Next() float64 {
+	return float64(zv.z.Uint64())
 }
 
 func BenchmarkAdd_1k_Zipfian(b *testing.B) {
-	n := 1000
-	valsToAdd := make([]float64, n)
+	benchmarkAdd(b, 1000, newZipfValues())
+}
 
-	r := rand.New(rand.NewSource(rngSeed))
-
-	z := rand.NewZipf(r, 1.5, 2, 1024*1024)
-
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = float64(z.Uint64())
-	}
-	cset := &centroidSet{}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
-		cset.addValue(valsToAdd[i%n], 1)
-	}
+func BenchmarkAdd_10k_Zipfian(b *testing.B) {
+	benchmarkAdd(b, 10000, newZipfValues())
 }
 
 func BenchmarkAdd_100k_Zipfian(b *testing.B) {
-	n := 100000
-	valsToAdd := make([]float64, n)
+	benchmarkAdd(b, 100000, newZipfValues())
+}
 
-	r := rand.New(rand.NewSource(rngSeed))
+type uniformValues struct {
+	r *rand.Rand
+}
 
-	z := rand.NewZipf(r, 1.5, 2, 1024*1024)
+func newUniformValues() *uniformValues {
+	return &uniformValues{rand.New(rand.NewSource(rngSeed))}
+}
 
-	for i := 0; i < len(valsToAdd); i++ {
-		valsToAdd[i] = float64(z.Uint64())
-	}
-	cset := &centroidSet{}
+func (uv *uniformValues) Next() float64 {
+	return uv.r.Float64()
+}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if i%n == 0 {
-			cset = &centroidSet{}
-		}
-		cset.addValue(valsToAdd[i%n], 1)
-	}
+func BenchmarkAdd_1k_Uniform(b *testing.B) {
+	benchmarkAdd(b, 1000, newUniformValues())
+}
+
+func BenchmarkAdd_10k_Uniform(b *testing.B) {
+	benchmarkAdd(b, 10000, newUniformValues())
+}
+
+func BenchmarkAdd_100k_Uniform(b *testing.B) {
+	benchmarkAdd(b, 100000, newUniformValues())
+}
+
+type normalValues struct {
+	r *rand.Rand
+}
+
+func newNormalValues() *normalValues {
+	return &normalValues{rand.New(rand.NewSource(rngSeed))}
+}
+
+func (uv *normalValues) Next() float64 {
+	return uv.r.NormFloat64()
+}
+
+func BenchmarkAdd_1k_Normal(b *testing.B) {
+	benchmarkAdd(b, 1000, newNormalValues())
+}
+
+func BenchmarkAdd_10k_Normal(b *testing.B) {
+	benchmarkAdd(b, 10000, newNormalValues())
+}
+
+func BenchmarkAdd_100k_Normal(b *testing.B) {
+	benchmarkAdd(b, 100000, newNormalValues())
 }
 
 // add the values [0,n) to a centroid set, equal weights
 func simpleCentroidSet(n int) *centroidSet {
-	cset := &centroidSet{accuracy: 1.0}
+	cset := newCentroidSet(1.0)
 	for i := 0; i < n; i++ {
 		cset.addValue(float64(i), 1)
 	}
@@ -341,10 +340,9 @@ func csetFromMeans(means []float64) *centroidSet {
 	for i, m := range means {
 		centroids[i] = &centroid{m, 1}
 	}
-	cset := &centroidSet{
-		centroids:  centroids,
-		countTotal: len(centroids),
-	}
+	cset := newCentroidSet(1.0)
+	cset.centroids = centroids
+	cset.countTotal = len(centroids)
 	return cset
 }
 
@@ -355,9 +353,8 @@ func csetFromWeights(weights []int) *centroidSet {
 		centroids[i] = &centroid{float64(i), w}
 		countTotal += w
 	}
-	cset := &centroidSet{
-		centroids:  centroids,
-		countTotal: countTotal,
-	}
+	cset := newCentroidSet(1.0)
+	cset.centroids = centroids
+	cset.countTotal = countTotal
 	return cset
 }
