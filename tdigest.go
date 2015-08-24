@@ -24,6 +24,15 @@ type TDigest interface {
 	Quantile(q float64) (val float64)
 }
 
+// NewTDigest produces a new TDigest. The input compression value,
+// which should be >= 1.0, will control how aggressively the TDigest
+// compresses data together.
+//
+// The original TDigest paper suggests using a value of 100 for a good
+// balance between precision and efficiency. It will land at very
+// small (think like 1e-6 percentile points) errors at extreme points
+// in the distribution, and compression ratios of around 500 for large
+// data sets (1 millionish datapoints).
 func NewTDigest(compression float64) TDigest {
 	return newCentroidSet(compression)
 }
