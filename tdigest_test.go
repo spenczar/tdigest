@@ -1,6 +1,7 @@
 package tdigest
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -421,4 +422,42 @@ func csetFromWeights(weights []int) *centroidSet {
 	cset.centroids = centroids
 	cset.countTotal = countTotal
 	return cset
+}
+
+func ExampleTDigest() {
+	rand.Seed(5678)
+	values := make(chan float64)
+
+	// Generate 100k uniform random data between 0 and 100
+	var (
+		n                = 100000
+		min, max float64 = 0, 100
+	)
+	go func() {
+		for i := 0; i < n; i++ {
+			values <- min + rand.Float64()*(max-min)
+		}
+		close(values)
+	}()
+
+	// Pass the values through a TDigest, compression parameter 100
+	td := New(100)
+
+	for val := range values {
+		// Add the value with weight 1
+		td.Add(val, 1)
+	}
+
+	// Print the 50th, 90th, 99th, 99.9th, and 99.99th percentiles
+	fmt.Printf("50th: %.5f\n", td.Quantile(0.5))
+	fmt.Printf("90th: %.5f\n", td.Quantile(0.9))
+	fmt.Printf("99th: %.5f\n", td.Quantile(0.99))
+	fmt.Printf("99.9th: %.5f\n", td.Quantile(0.999))
+	fmt.Printf("99.99th: %.5f\n", td.Quantile(0.9999))
+	// Output:
+	// 50th: 48.74854
+	// 90th: 89.79825
+	// 99th: 98.92954
+	// 99.9th: 99.90189
+	// 99.99th: 99.98740
 }
