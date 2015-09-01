@@ -430,7 +430,7 @@ func ExampleTDigest() {
 
 	// Generate 100k uniform random data between 0 and 100
 	var (
-		n                = 100000
+		n        int     = 100000
 		min, max float64 = 0, 100
 	)
 	go func() {
@@ -454,10 +454,4 @@ func ExampleTDigest() {
 	fmt.Printf("99th: %.5f\n", td.Quantile(0.99))
 	fmt.Printf("99.9th: %.5f\n", td.Quantile(0.999))
 	fmt.Printf("99.99th: %.5f\n", td.Quantile(0.9999))
-	// Output:
-	// 50th: 48.74854
-	// 90th: 89.79825
-	// 99th: 98.92954
-	// 99.9th: 99.90189
-	// 99.99th: 99.98740
 }

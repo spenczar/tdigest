@@ -20,7 +20,7 @@ func ExampleTDigest() {
 
 	// Generate 100k uniform random data between 0 and 100
 	var (
-		n                = 100000
+		n        int     = 100000
 		min, max float64 = 0, 100
 	)
 	go func() {
