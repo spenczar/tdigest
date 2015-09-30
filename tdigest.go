@@ -117,24 +117,70 @@ func (cs *centroidSet) centroidHasRoom(idx int) bool {
 // find which centroid to add the value to (by index)
 func (cs *centroidSet) findAddTarget(val float64) int {
 	var (
-		nMatch  int   = 0
-		addTo   int   = -1
-		nearest []int = cs.nearest(val)
+		nearest  []int = cs.nearest(val)
+		eligible []int
 	)
+
 	for _, c := range nearest {
 		// if there is room for more weight at this centroid...
 		if cs.centroidHasRoom(c) {
-			nMatch += 1
-			// ... and it passes a random filter...
-			r := rand.Intn(nMatch)
-
-			if r == 0 {
-				// ... then add it here
-				addTo = c
-			}
+			eligible = append(eligible, c)
 		}
 	}
-	return addTo
+
+	if len(eligible) == 0 {
+		return -1
+	}
+	if len(eligible) == 1 {
+		return eligible[0]
+	}
+
+	// Multiple eligible centroids to add to. They must be equidistant
+	// from this value. Four cases are possible:
+	//
+	//   1. All eligible centroids' means are less than val
+	//   2. Some eligible centroids' means are less than val, some are greater
+	//   3. All eligible centroids' means are exactly equal to val
+	//   4. All eligible centroids' means are greater than val
+	//
+	// If 1, then we should take the highest indexed centroid to
+	// preserve ordering.  If 4, we should take the lowest for the
+	// same reason. If 2 or 3, we can pick randomly.
+
+	var anyLesser, anyGreater bool
+	for _, c := range eligible {
+		m := cs.centroids[c].mean
+		if m < val {
+			anyLesser = true
+		} else if m > val {
+			anyGreater = true
+		}
+	}
+
+	// case 1: all are less, none are greater. Take highest one.
+	if anyLesser && !anyGreater {
+		greatest := eligible[0]
+		for _, c := range eligible[1:] {
+			if c > greatest {
+				greatest = c
+			}
+		}
+		return greatest
+	}
+
+	// case 4: all are greater, none are less. Take lowest one.
+	if !anyLesser && anyGreater {
+		least := eligible[0]
+		for _, c := range eligible[1:] {
+			if c < least {
+				least = c
+			}
+		}
+		return least
+	}
+
+	// case 2 or 3: Anything else. Pick randomly.
+	return eligible[rand.Intn(len(eligible))]
 }
 
 func (cs *centroidSet) addNewCentroid(mean float64, weight int) {

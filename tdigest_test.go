@@ -104,6 +104,60 @@ func TestAddNewCentroid(t *testing.T) {
 	}
 }
 
+func verifyCentroidOrder(t *testing.T, cs *centroidSet) {
+	if len(cs.centroids) < 2 {
+		return
+	}
+	last := cs.centroids[0]
+	for i, c := range cs.centroids[1:] {
+		if c.mean < last.mean {
+			t.Errorf("centroid %d lt %d: %v < %v", i+1, i, c.mean, last.mean)
+		}
+		last = c
+	}
+}
+
+func TestQuantileOrder(t *testing.T) {
+	// stumbled upon in real world application: adding a 1 to this
+	// resulted in the 6th centroid getting incremented instead of the
+	// 7th.
+	cset := &centroidSet{
+		countTotal:  14182,
+		compression: 100,
+		centroids: []*centroid{
+			&centroid{0.000000, 1},
+			&centroid{0.000000, 564},
+			&centroid{0.000000, 1140},
+			&centroid{0.000000, 1713},
+			&centroid{0.000000, 2380},
+			&centroid{0.000000, 2688},
+			&centroid{0.000000, 1262},
+			&centroid{2.005758, 1563},
+			&centroid{30.499251, 1336},
+			&centroid{381.533509, 761},
+			&centroid{529.600000, 5},
+			&centroid{1065.294118, 17},
+			&centroid{2266.444444, 36},
+			&centroid{4268.809783, 368},
+			&centroid{14964.148148, 27},
+			&centroid{41024.579618, 157},
+			&centroid{124311.192308, 52},
+			&centroid{219674.636364, 22},
+			&centroid{310172.775000, 40},
+			&centroid{412388.642857, 14},
+			&centroid{582867.000000, 16},
+			&centroid{701434.777778, 9},
+			&centroid{869363.800000, 5},
+			&centroid{968264.000000, 1},
+			&centroid{987100.666667, 3},
+			&centroid{1029895.000000, 1},
+			&centroid{1034640.000000, 1},
+		},
+	}
+	cset.Add(1.0, 1)
+	verifyCentroidOrder(t, cset)
+}
+
 func TestQuantile(t *testing.T) {
 	type testcase struct {
 		weights []int
