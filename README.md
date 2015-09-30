@@ -13,7 +13,7 @@ statistics of a large stream of data, like the 99.9th percentile.
 
 An example is available in the Godoc which shows the API:
 
-```
+```go
 func ExampleTDigest() {
 	rand.Seed(5678)
 	values := make(chan float64)
