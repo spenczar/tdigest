@@ -69,31 +69,28 @@ func newCentroidSet(compression float64) *centroidSet {
 // TODO: Use a better data structure to avoid this loop.
 func (cs *centroidSet) nearest(val float64) []int {
 	var (
-		nearestDist float64
+		nearestDist float64 = math.Inf(+1)
 		thisDist    float64
-		result      []int
+		delta       float64
+		result      []int = make([]int, 0)
 	)
 	for i, c := range cs.centroids {
-		thisDist = math.Abs(val - c.mean)
-		// on the first loop, the nearest hasn't yet been found, so
-		// mark the first centroid as a 'winner.'
-		if len(result) == 0 {
-			nearestDist = thisDist
-			result = []int{i}
-			continue
+		thisDist = val - c.mean
+		if thisDist < 0 {
+			thisDist *= -1
 		}
-		if thisDist < nearestDist {
+
+		delta = thisDist - nearestDist
+		switch {
+		case delta < 0:
 			// we have a new winner!
 			nearestDist = thisDist
-			result = []int{i}
-			continue
-		}
-		if thisDist == nearestDist {
+			result = result[0:0] // wipe result
+			result = append(result, i)
+		case delta == 0:
 			// we have a tie
 			result = append(result, i)
-			continue
-		}
-		if thisDist > nearestDist {
+		default:
 			// Since cs.centroids is sorted by mean, this means we
 			// have passed the best spot, so we may as well break
 			break
