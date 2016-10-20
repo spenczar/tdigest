@@ -19,21 +19,32 @@ import (
 // it is outside that range, it will be clipped into it automatically.
 //
 // Calling Quantile on a TDigest with no data should return NaN.
+//
+// MergeInto(other) will add all of the data within a TDigest into
+// other, combining them into one larger TDigest.
 type TDigest interface {
 	Add(val float64, weight int)
 	Quantile(q float64) (val float64)
+	MergeInto(other TDigest)
 }
 
-// New produces a new TDigest. The input compression value, which
-// should be >= 1.0, will control how aggressively the TDigest
-// compresses data together.
+// New produces a new TDigest using the default compression level of
+// 100.
+func New() TDigest {
+	return NewWithCompression(100)
+}
+
+// NewWithCompression produces a new TDigest with a specific
+// compression level. The input compression value, which should be >=
+// 1.0, will control how aggressively the TDigest compresses data
+// together.
 //
 // The original TDigest paper suggests using a value of 100 for a good
 // balance between precision and efficiency. It will land at very
 // small (think like 1e-6 percentile points) errors at extreme points
 // in the distribution, and compression ratios of around 500 for large
 // data sets (1 millionish datapoints).
-func New(compression float64) TDigest {
+func NewWithCompression(compression float64) TDigest {
 	return newCentroidSet(compression)
 }
 
@@ -213,7 +224,7 @@ func (cs *centroidSet) Add(val float64, weight int) {
 	// if adding this node to this centroid would put it over the
 	// weight limit, just add the most we can and recur with the remainder
 	if c.count+weight > limit {
-		log.Printf("splitting value %f weight=%d", val, weight)
+		log.Printf("splitting value %f weight=%d (adding just %d)", val, weight, limit-c.count)
 		add := limit - c.count
 		if add < 0 {
 			// this node was already overweight
@@ -296,4 +307,31 @@ func (cs *centroidSet) Quantile(q float64) float64 {
 	slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
 	deltaQ := q - (float64(c1.count)/2 + qTotal)
 	return c1.mean + slope*deltaQ
+}
+
+func (cs *centroidSet) MergeInto(other TDigest) {
+	// Add each centroid in cs into other. They should be added in
+	// random order.
+	addOrder := rand.Perm(len(cs.centroids))
+	for _, idx := range addOrder {
+		c := cs.centroids[idx]
+		// gradually write up the volume written so that the tdigest doesnt overload early
+		added := 0
+		for i := 1; i < 10; i++ {
+			fmt.Printf("%v\n", other.(*centroidSet).centroids)
+			toAdd := i * 2
+			if added+i > c.count {
+				toAdd = c.count - added
+			}
+			other.Add(c.mean, toAdd)
+			added += toAdd
+			if added >= c.count {
+				break
+			}
+		}
+		if added < c.count {
+			other.Add(c.mean, c.count-added)
+		}
+		other.Add(c.mean, c.count)
+	}
 }

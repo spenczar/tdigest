@@ -30,8 +30,8 @@ func ExampleTDigest() {
 		close(values)
 	}()
 
-	// Pass the values through a TDigest, compression parameter 100
-	td := New(100)
+	// Pass the values through a TDigest.
+	td := New()
 
 	for val := range values {
 		// Add the value with weight 1
@@ -76,8 +76,8 @@ Error will be largest in the middle - the median is the least accurate
 point in the t-digest.
 
 The actual precision can be controlled with the `compression`
-parameter passed to the constructor function `New` in this
-package. Lower `compression` parameters will result in poorer
+parameter passed to the constructor function `NewWithCompression` in
+this package. Lower `compression` parameters will result in poorer
 compression, but will improve performance in estimating quantiles. If
 you care deeply about tuning such things, experiment with the
 compression ratio.
@@ -101,4 +101,3 @@ Quantiles are very, very quick to calculate, and typically take tens
 of nanoseconds. They might take up to a few hundred nanoseconds for
 large, poorly compressed (read: ordered) datasets, but in general, you
 don't have to worry about the speed of calls to Quantile.
-

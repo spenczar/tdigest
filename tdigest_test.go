@@ -310,7 +310,7 @@ func ExampleTDigest() {
 	}()
 
 	// Pass the values through a TDigest, compression parameter 100
-	td := New(100)
+	td := New()
 
 	for val := range values {
 		// Add the value with weight 1
@@ -318,6 +318,63 @@ func ExampleTDigest() {
 	}
 
 	// Print the 50th, 90th, 99th, 99.9th, and 99.99th percentiles
+	fmt.Printf("50th: %.5f\n", td.Quantile(0.5))
+	fmt.Printf("90th: %.5f\n", td.Quantile(0.9))
+	fmt.Printf("99th: %.5f\n", td.Quantile(0.99))
+	fmt.Printf("99.9th: %.5f\n", td.Quantile(0.999))
+	fmt.Printf("99.99th: %.5f\n", td.Quantile(0.9999))
+}
+
+func TestMerge(t *testing.T) {
+	values := make(chan float64)
+
+	// Generate 100k uniform random data between 0 and 100
+	var (
+		n        int     = 100000
+		min, max float64 = 0, 100
+	)
+	go func() {
+		for i := 0; i < n; i++ {
+			values <- min + rand.Float64()*(max-min)
+		}
+		close(values)
+	}()
+
+	// Pass the values through two TDigests
+	td1 := New()
+	td2 := New()
+
+	i := 0
+	for val := range values {
+		// Add the value with weight 1. Alternate between the digests.
+		if i%2 == 0 {
+			td1.Add(val, 1)
+		} else {
+			td2.Add(val, 1)
+		}
+		i += 1
+	}
+
+	rand.Seed(2)
+	// merge both into a third tdigest.
+	td := New()
+	td1.MergeInto(td)
+	td2.MergeInto(td)
+	fmt.Printf("10th: %.5f\n", td1.Quantile(0.1))
+	fmt.Printf("50th: %.5f\n", td1.Quantile(0.5))
+	fmt.Printf("90th: %.5f\n", td1.Quantile(0.9))
+	fmt.Printf("99th: %.5f\n", td1.Quantile(0.99))
+	fmt.Printf("99.9th: %.5f\n", td1.Quantile(0.999))
+	fmt.Printf("99.99th: %.5f\n", td1.Quantile(0.9999))
+
+	fmt.Printf("10th: %.5f\n", td2.Quantile(0.1))
+	fmt.Printf("50th: %.5f\n", td2.Quantile(0.5))
+	fmt.Printf("90th: %.5f\n", td2.Quantile(0.9))
+	fmt.Printf("99th: %.5f\n", td2.Quantile(0.99))
+	fmt.Printf("99.9th: %.5f\n", td2.Quantile(0.999))
+	fmt.Printf("99.99th: %.5f\n", td2.Quantile(0.9999))
+
+	fmt.Printf("10th: %.5f\n", td.Quantile(0.1))
 	fmt.Printf("50th: %.5f\n", td.Quantile(0.5))
 	fmt.Printf("90th: %.5f\n", td.Quantile(0.9))
 	fmt.Printf("99th: %.5f\n", td.Quantile(0.99))
