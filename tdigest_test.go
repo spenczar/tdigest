@@ -381,3 +381,29 @@ func TestMerge(t *testing.T) {
 	fmt.Printf("99.9th: %.5f\n", td.Quantile(0.999))
 	fmt.Printf("99.99th: %.5f\n", td.Quantile(0.9999))
 }
+
+func TestMarshalUnmarshal(t *testing.T) {
+	testcase := func(in *centroidSet) func(*testing.T) {
+		return func(t *testing.T) {
+			bytes, err := in.MarshalBinary()
+			if err != nil {
+				t.Fatalf("error marshaling: %v", err)
+			}
+
+			out := new(centroidSet)
+			err = out.UnmarshalBinary(bytes)
+			if err != nil {
+				t.Fatalf("error unmarshaling: %v", err)
+			}
+
+			if !reflect.DeepEqual(in, out) {
+				t.Error("marshal-unmarshal roundtrip should create identical centroidSet")
+			}
+		}
+	}
+
+	t.Run("empty", testcase(newCentroidSet(100)))
+	t.Run("1 value", testcase(csetFromMeans([]float64{1})))
+	t.Run("4 values", testcase(csetFromMeans([]float64{1, 1.5, 1.6, 2})))
+	t.Run("1000 values", testcase(simpleCentroidSet(1000)))
+}

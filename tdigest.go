@@ -1,7 +1,10 @@
 package tdigest
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -22,10 +25,17 @@ import (
 //
 // MergeInto(other) will add all of the data within a TDigest into
 // other, combining them into one larger TDigest.
+//
+// Finally, TDigests implement the encoding package's BinaryMarshaler and
+// BinaryUnmarshaler interfaces, allowing them to be serialized and shared
+// between processes.
 type TDigest interface {
 	Add(val float64, weight int)
 	Quantile(q float64) (val float64)
 	MergeInto(other TDigest)
+
+	MarshalBinary() ([]byte, error)
+	UnmarshalBinary([]byte) error
 }
 
 // New produces a new TDigest using the default compression level of
@@ -334,4 +344,97 @@ func (cs *centroidSet) MergeInto(other TDigest) {
 		}
 		other.Add(c.mean, c.count)
 	}
+}
+
+func (cs *centroidSet) MarshalBinary() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	w := &stickyErrWriter{w: buf, err: nil}
+	binary.Write(w, binary.LittleEndian, int32(1))
+
+	var min, max float64
+	if len(cs.centroids) > 0 {
+		min = cs.centroids[0].mean
+		max = cs.centroids[len(cs.centroids)-1].mean
+	}
+
+	binary.Write(w, binary.LittleEndian, min)
+	binary.Write(w, binary.LittleEndian, max)
+	binary.Write(w, binary.LittleEndian, float64(cs.compression))
+	binary.Write(w, binary.LittleEndian, int32(len(cs.centroids)))
+	if w.err != nil {
+		return nil, w.err
+	}
+	for _, c := range cs.centroids {
+		binary.Write(w, binary.LittleEndian, int64(c.count))
+		binary.Write(w, binary.LittleEndian, float64(c.mean))
+	}
+	if w.err != nil {
+		return nil, w.err
+	}
+	return buf.Bytes(), nil
+}
+
+func (cs *centroidSet) UnmarshalBinary(p []byte) error {
+	var (
+		encodingVersion int32
+		min, max        float64
+		n               int32
+	)
+	r := &stickyErrReader{r: bytes.NewReader(p), err: nil}
+
+	binary.Read(r, binary.LittleEndian, &encodingVersion)
+	if encodingVersion != 1 {
+		return fmt.Errorf("invalid encoding version: %d", encodingVersion)
+	}
+
+	binary.Read(r, binary.LittleEndian, &min)
+	binary.Read(r, binary.LittleEndian, &max)
+	binary.Read(r, binary.LittleEndian, &cs.compression)
+	binary.Read(r, binary.LittleEndian, &n)
+	if r.err != nil {
+		return r.err
+	}
+
+	cs.centroids = make([]*centroid, int(n))
+	for i := 0; i < int(n); i++ {
+		var (
+			count int64
+			mean  float64
+		)
+		binary.Read(r, binary.LittleEndian, &count)
+		binary.Read(r, binary.LittleEndian, &mean)
+		if r.err != nil {
+			return r.err
+		}
+		cs.centroids[i] = &centroid{count: int(count), mean: mean}
+		cs.countTotal += int(count)
+	}
+
+	return r.err
+}
+
+type stickyErrWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (sew *stickyErrWriter) Write(p []byte) (n int, err error) {
+	if sew.err != nil {
+		return 0, sew.err
+	}
+	n, sew.err = sew.w.Write(p)
+	return n, sew.err
+}
+
+type stickyErrReader struct {
+	r   io.Reader
+	err error
+}
+
+func (ser *stickyErrReader) Read(p []byte) (n int, err error) {
+	if ser.err != nil {
+		return 0, ser.err
+	}
+	n, ser.err = ser.r.Read(p)
+	return n, ser.err
 }
