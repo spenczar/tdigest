@@ -2,7 +2,6 @@ package tdigest
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 )
@@ -224,7 +223,6 @@ func (cs *centroidSet) Add(val float64, weight int) {
 	// if adding this node to this centroid would put it over the
 	// weight limit, just add the most we can and recur with the remainder
 	if c.count+weight > limit {
-		log.Printf("splitting value %f weight=%d (adding just %d)", val, weight, limit-c.count)
 		add := limit - c.count
 		if add < 0 {
 			// this node was already overweight
@@ -318,7 +316,6 @@ func (cs *centroidSet) MergeInto(other TDigest) {
 		// gradually write up the volume written so that the tdigest doesnt overload early
 		added := 0
 		for i := 1; i < 10; i++ {
-			fmt.Printf("%v\n", other.(*centroidSet).centroids)
 			toAdd := i * 2
 			if added+i > c.count {
 				toAdd = c.count - added
