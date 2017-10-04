@@ -293,7 +293,6 @@ func (d *TDigest) MergeInto(other *TDigest) {
 	addOrder := rand.Perm(len(d.centroids))
 	for _, idx := range addOrder {
 		c := d.centroids[idx]
-		log.Printf("adding %+v", c)
 		// gradually write up the volume written so that the tdigest doesnt overload
 		// early
 		added := int64(0)
