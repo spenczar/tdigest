@@ -26,15 +26,15 @@ func TestFindNearest(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		cs := centroidSet{centroids: tc.centroids}
+		cs := TDigest{centroids: tc.centroids}
 		have := cs.nearest(tc.val)
 		if len(tc.want) == 0 {
 			if len(have) != 0 {
-				t.Errorf("centroidSet.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
+				t.Errorf("TDigest.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
 			}
 		} else {
 			if !reflect.DeepEqual(tc.want, have) {
-				t.Errorf("centroidSet.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
+				t.Errorf("TDigest.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
 			}
 		}
 	}
@@ -42,13 +42,13 @@ func TestFindNearest(t *testing.T) {
 
 func BenchmarkFindNearest(b *testing.B) {
 	n := 500
-	cset := simpleCentroidSet(n)
+	d := simpleTDigest(n)
 
 	b.ResetTimer()
 	var val float64
 	for i := 0; i < b.N; i++ {
-		val = float64(i % cset.countTotal)
-		_ = cset.nearest(val)
+		val = float64(i % d.countTotal)
+		_ = d.nearest(val)
 	}
 }
 
@@ -63,10 +63,10 @@ func TestFindAddTarget(t *testing.T) {
 		{[]*centroid{}, 1, -1},
 	}
 	for i, tc := range testcases {
-		cs := centroidSet{centroids: tc.centroids, countTotal: len(tc.centroids)}
+		cs := TDigest{centroids: tc.centroids, countTotal: len(tc.centroids)}
 		have := cs.findAddTarget(tc.val)
 		if have != tc.want {
-			t.Errorf("centroidSet.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
+			t.Errorf("TDigest.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
 		}
 	}
 }
@@ -88,21 +88,21 @@ func TestAddNewCentroid(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		cset := csetFromMeans(tc.centroidVals)
-		cset.addNewCentroid(tc.add, 1)
+		d := tdigestFromMeans(tc.centroidVals)
+		d.addNewCentroid(tc.add, 1)
 
-		have := make([]float64, len(cset.centroids))
-		for i, c := range cset.centroids {
+		have := make([]float64, len(d.centroids))
+		for i, c := range d.centroids {
 			have[i] = c.mean
 		}
 
 		if !reflect.DeepEqual(tc.want, have) {
-			t.Errorf("centroidSet.addNewCentroid wrong test=%d, have=%v, want=%v", i, have, tc.want)
+			t.Errorf("TDigest.addNewCentroid wrong test=%d, have=%v, want=%v", i, have, tc.want)
 		}
 	}
 }
 
-func verifyCentroidOrder(t *testing.T, cs *centroidSet) {
+func verifyCentroidOrder(t *testing.T, cs *TDigest) {
 	if len(cs.centroids) < 2 {
 		return
 	}
@@ -119,7 +119,7 @@ func TestQuantileOrder(t *testing.T) {
 	// stumbled upon in real world application: adding a 1 to this
 	// resulted in the 6th centroid getting incremented instead of the
 	// 7th.
-	cset := &centroidSet{
+	d := &TDigest{
 		countTotal:  14182,
 		compression: 100,
 		centroids: []*centroid{
@@ -152,8 +152,8 @@ func TestQuantileOrder(t *testing.T) {
 			&centroid{1034640.000000, 1},
 		},
 	}
-	cset.Add(1.0, 1)
-	verifyCentroidOrder(t, cset)
+	d.Add(1.0, 1)
+	verifyCentroidOrder(t, d)
 }
 
 func TestQuantile(t *testing.T) {
@@ -180,10 +180,10 @@ func TestQuantile(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		cset := csetFromWeights(tc.weights)
-		have := cset.quantileOf(tc.idx)
+		d := tdigestFromWeights(tc.weights)
+		have := d.quantileOf(tc.idx)
 		if have != tc.want {
-			t.Errorf("centroidSet.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
+			t.Errorf("TDigest.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
 		}
 	}
 }
@@ -203,19 +203,19 @@ func TestAddValue(t *testing.T) {
 		{4.0, 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
 	}
 
-	cset := newCentroidSet(1)
+	d := NewWithCompression(1)
 	for i, tc := range testcases {
-		cset.Add(tc.value, tc.weight)
-		if !reflect.DeepEqual(cset.centroids, tc.want) {
-			t.Fatalf("centroidSet.addValue unexpected state step=%d, have=%v, want=%v", i, cset.centroids, tc.want)
+		d.Add(tc.value, tc.weight)
+		if !reflect.DeepEqual(d.centroids, tc.want) {
+			t.Fatalf("TDigest.addValue unexpected state step=%d, have=%v, want=%v", i, d.centroids, tc.want)
 		}
 	}
 }
 
 func TestQuantileValue(t *testing.T) {
-	cset := newCentroidSet(1)
-	cset.countTotal = 8
-	cset.centroids = []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}}
+	d := NewWithCompression(1)
+	d.countTotal = 8
+	d.centroids = []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}}
 
 	type testcase struct {
 		q    float64
@@ -240,9 +240,9 @@ func TestQuantileValue(t *testing.T) {
 	var epsilon = 1e-8
 
 	for i, tc := range testcases {
-		have := cset.Quantile(tc.q)
+		have := d.Quantile(tc.q)
 		if math.Abs(have-tc.want) > epsilon {
-			t.Errorf("centroidSet.Quantile wrong step=%d, have=%v, want=%v",
+			t.Errorf("TDigest.Quantile wrong step=%d, have=%v, want=%v",
 				i, have, tc.want)
 		}
 	}
@@ -250,47 +250,47 @@ func TestQuantileValue(t *testing.T) {
 
 func BenchmarkFindAddTarget(b *testing.B) {
 	n := 500
-	cset := simpleCentroidSet(n)
+	d := simpleTDigest(n)
 
 	b.ResetTimer()
 	var val float64
 	for i := 0; i < b.N; i++ {
-		val = float64(i % cset.countTotal)
-		_ = cset.findAddTarget(val)
+		val = float64(i % d.countTotal)
+		_ = d.findAddTarget(val)
 	}
 }
 
 // add the values [0,n) to a centroid set, equal weights
-func simpleCentroidSet(n int) *centroidSet {
-	cset := newCentroidSet(1.0)
+func simpleTDigest(n int) *TDigest {
+	d := NewWithCompression(1.0)
 	for i := 0; i < n; i++ {
-		cset.Add(float64(i), 1)
+		d.Add(float64(i), 1)
 	}
-	return cset
+	return d
 }
 
-func csetFromMeans(means []float64) *centroidSet {
+func tdigestFromMeans(means []float64) *TDigest {
 	centroids := make([]*centroid, len(means))
 	for i, m := range means {
 		centroids[i] = &centroid{m, 1}
 	}
-	cset := newCentroidSet(1.0)
-	cset.centroids = centroids
-	cset.countTotal = len(centroids)
-	return cset
+	d := NewWithCompression(1.0)
+	d.centroids = centroids
+	d.countTotal = len(centroids)
+	return d
 }
 
-func csetFromWeights(weights []int) *centroidSet {
+func tdigestFromWeights(weights []int) *TDigest {
 	centroids := make([]*centroid, len(weights))
 	countTotal := 0
 	for i, w := range weights {
 		centroids[i] = &centroid{float64(i), w}
 		countTotal += w
 	}
-	cset := newCentroidSet(1.0)
-	cset.centroids = centroids
-	cset.countTotal = countTotal
-	return cset
+	d := NewWithCompression(1.0)
+	d.centroids = centroids
+	d.countTotal = countTotal
+	return d
 }
 
 func ExampleTDigest() {
@@ -383,27 +383,27 @@ func TestMerge(t *testing.T) {
 }
 
 func TestMarshalUnmarshal(t *testing.T) {
-	testcase := func(in *centroidSet) func(*testing.T) {
+	testcase := func(in *TDigest) func(*testing.T) {
 		return func(t *testing.T) {
 			bytes, err := in.MarshalBinary()
 			if err != nil {
 				t.Fatalf("error marshaling: %v", err)
 			}
 
-			out := new(centroidSet)
+			out := new(TDigest)
 			err = out.UnmarshalBinary(bytes)
 			if err != nil {
 				t.Fatalf("error unmarshaling: %v", err)
 			}
 
 			if !reflect.DeepEqual(in, out) {
-				t.Error("marshal-unmarshal roundtrip should create identical centroidSet")
+				t.Error("marshal-unmarshal roundtrip should create identical TDigest")
 			}
 		}
 	}
 
-	t.Run("empty", testcase(newCentroidSet(100)))
-	t.Run("1 value", testcase(csetFromMeans([]float64{1})))
-	t.Run("4 values", testcase(csetFromMeans([]float64{1, 1.5, 1.6, 2})))
-	t.Run("1000 values", testcase(simpleCentroidSet(1000)))
+	t.Run("empty", testcase(New()))
+	t.Run("1 value", testcase(tdigestFromMeans([]float64{1})))
+	t.Run("4 values", testcase(tdigestFromMeans([]float64{1, 1.5, 1.6, 2})))
+	t.Run("1000 values", testcase(simpleTDigest(1000)))
 }
