@@ -42,7 +42,7 @@ func TestFindNearest(t *testing.T) {
 
 func BenchmarkFindNearest(b *testing.B) {
 	n := 500
-	d := simpleCentroidSet(n)
+	d := simpleTDigest(n)
 
 	b.ResetTimer()
 	var val float64
@@ -88,7 +88,7 @@ func TestAddNewCentroid(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		d := csetFromMeans(tc.centroidVals)
+		d := tdFromMeans(tc.centroidVals)
 		d.addNewCentroid(tc.add, 1)
 
 		have := make([]float64, len(d.centroids))
@@ -180,7 +180,7 @@ func TestQuantile(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		d := csetFromWeights(tc.weights)
+		d := tdFromWeights(tc.weights)
 		have := d.quantileOf(tc.idx)
 		if have != tc.want {
 			t.Errorf("TDigest.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
@@ -250,7 +250,7 @@ func TestQuantileValue(t *testing.T) {
 
 func BenchmarkFindAddTarget(b *testing.B) {
 	n := 500
-	d := simpleCentroidSet(n)
+	d := simpleTDigest(n)
 
 	b.ResetTimer()
 	var val float64
@@ -261,7 +261,7 @@ func BenchmarkFindAddTarget(b *testing.B) {
 }
 
 // add the values [0,n) to a centroid set, equal weights
-func simpleCentroidSet(n int) *TDigest {
+func simpleTDigest(n int) *TDigest {
 	d := NewWithCompression(1.0)
 	for i := 0; i < n; i++ {
 		d.Add(float64(i), 1)
@@ -269,7 +269,7 @@ func simpleCentroidSet(n int) *TDigest {
 	return d
 }
 
-func csetFromMeans(means []float64) *TDigest {
+func tdFromMeans(means []float64) *TDigest {
 	centroids := make([]*centroid, len(means))
 	for i, m := range means {
 		centroids[i] = &centroid{m, 1}
@@ -280,7 +280,7 @@ func csetFromMeans(means []float64) *TDigest {
 	return d
 }
 
-func csetFromWeights(weights []int64) *TDigest {
+func tdFromWeights(weights []int64) *TDigest {
 	centroids := make([]*centroid, len(weights))
 	countTotal := int64(0)
 	for i, w := range weights {
