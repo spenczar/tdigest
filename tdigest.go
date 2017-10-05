@@ -52,14 +52,14 @@ func NewWithCompression(compression float64) *TDigest {
 // input value.
 //
 // TODO: Use a better data structure to avoid this loop.
-func (cs *TDigest) nearest(val float64) []int {
+func (d *TDigest) nearest(val float64) []int {
 	var (
 		nearestDist float64 = math.Inf(+1)
 		thisDist    float64
 		delta       float64
 		result      []int = make([]int, 0)
 	)
-	for i, c := range cs.centroids {
+	for i, c := range d.centroids {
 		thisDist = val - c.mean
 		if thisDist < 0 {
 			thisDist *= -1
@@ -76,7 +76,7 @@ func (cs *TDigest) nearest(val float64) []int {
 			// we have a tie
 			result = append(result, i)
 		default:
-			// Since cs.centroids is sorted by mean, this means we
+			// Since d.centroids is sorted by mean, this means we
 			// have passed the best spot, so we may as well break
 			break
 		}
@@ -85,27 +85,27 @@ func (cs *TDigest) nearest(val float64) []int {
 }
 
 // returns the maximum weight that can be placed at specified index
-func (cs *TDigest) weightLimit(idx int) int64 {
-	ptile := cs.quantileOf(idx)
-	limit := int64(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
+func (d *TDigest) weightLimit(idx int) int64 {
+	ptile := d.quantileOf(idx)
+	limit := int64(4 * d.compression * ptile * (1 - ptile) * float64(len(d.centroids)))
 	return limit
 }
 
 // checks whether the centroid has room for more weight
-func (cs *TDigest) centroidHasRoom(idx int) bool {
-	return cs.centroids[idx].count < cs.weightLimit(idx)
+func (d *TDigest) centroidHasRoom(idx int) bool {
+	return d.centroids[idx].count < d.weightLimit(idx)
 }
 
 // find which centroid to add the value to (by index)
-func (cs *TDigest) findAddTarget(val float64) int {
+func (d *TDigest) findAddTarget(val float64) int {
 	var (
-		nearest  []int = cs.nearest(val)
+		nearest  []int = d.nearest(val)
 		eligible []int
 	)
 
 	for _, c := range nearest {
 		// if there is room for more weight at this centroid...
-		if cs.centroidHasRoom(c) {
+		if d.centroidHasRoom(c) {
 			eligible = append(eligible, c)
 		}
 	}
@@ -131,7 +131,7 @@ func (cs *TDigest) findAddTarget(val float64) int {
 
 	var anyLesser, anyGreater bool
 	for _, c := range eligible {
-		m := cs.centroids[c].mean
+		m := d.centroids[c].mean
 		if m < val {
 			anyLesser = true
 		} else if m > val {
@@ -165,10 +165,10 @@ func (cs *TDigest) findAddTarget(val float64) int {
 	return eligible[rand.Intn(len(eligible))]
 }
 
-func (cs *TDigest) addNewCentroid(mean float64, weight int64) {
-	var idx int = len(cs.centroids)
+func (d *TDigest) addNewCentroid(mean float64, weight int64) {
+	var idx int = len(d.centroids)
 
-	for i, c := range cs.centroids {
+	for i, c := range d.centroids {
 		// add in sorted order
 		if mean < c.mean {
 			idx = i
@@ -176,26 +176,26 @@ func (cs *TDigest) addNewCentroid(mean float64, weight int64) {
 		}
 	}
 
-	cs.centroids = append(cs.centroids, nil)
-	copy(cs.centroids[idx+1:], cs.centroids[idx:])
-	cs.centroids[idx] = &centroid{mean, weight}
+	d.centroids = append(d.centroids, nil)
+	copy(d.centroids[idx+1:], d.centroids[idx:])
+	d.centroids[idx] = &centroid{mean, weight}
 }
 
 // Add will add a value to the TDigest, updating all quantiles. A
 // weight can be specified; use weight of 1 if you don't care about
 // weighting your dataset.
-func (cs *TDigest) Add(val float64, weight int64) {
-	cs.countTotal += weight
-	var idx = cs.findAddTarget(val)
+func (d *TDigest) Add(val float64, weight int64) {
+	d.countTotal += weight
+	var idx = d.findAddTarget(val)
 
 	if idx == -1 {
-		cs.addNewCentroid(val, weight)
+		d.addNewCentroid(val, weight)
 		return
 	}
 
-	c := cs.centroids[idx]
+	c := d.centroids[idx]
 
-	limit := cs.weightLimit(idx)
+	limit := d.weightLimit(idx)
 	// how much weight will we be adding?
 	// if adding this node to this centroid would put it over the
 	// weight limit, just add the most we can and recur with the remainder
@@ -210,7 +210,7 @@ func (cs *TDigest) Add(val float64, weight int64) {
 		c.count += add
 		c.mean = c.mean + float64(add)*(val-c.mean)/float64(c.count)
 
-		cs.Add(val, remainder)
+		d.Add(val, remainder)
 	} else {
 		c.count += weight
 		c.mean = c.mean + float64(weight)*(val-c.mean)/float64(c.count)
@@ -220,12 +220,12 @@ func (cs *TDigest) Add(val float64, weight int64) {
 
 // returns the approximate quantile that a particular centroid
 // represents
-func (cs *TDigest) quantileOf(idx int) float64 {
+func (d *TDigest) quantileOf(idx int) float64 {
 	var total int64
-	for _, c := range cs.centroids[:idx] {
+	for _, c := range d.centroids[:idx] {
 		total += c.count
 	}
-	return (float64(cs.centroids[idx].count/2) + float64(total)) / float64(cs.countTotal)
+	return (float64(d.centroids[idx].count/2) + float64(total)) / float64(d.countTotal)
 }
 
 // Quantile(q) will estimate the qth quantile value of the dataset. The input
@@ -233,13 +233,13 @@ func (cs *TDigest) quantileOf(idx int) float64 {
 // will be clipped into it automatically.
 //
 // Calling Quantile on a TDigest with no data will return NaN.
-func (cs *TDigest) Quantile(q float64) float64 {
-	var n = len(cs.centroids)
+func (d *TDigest) Quantile(q float64) float64 {
+	var n = len(d.centroids)
 	if n == 0 {
 		return math.NaN()
 	}
 	if n == 1 {
-		return cs.centroids[0].mean
+		return d.centroids[0].mean
 	}
 
 	if q < 0 {
@@ -249,22 +249,22 @@ func (cs *TDigest) Quantile(q float64) float64 {
 	}
 
 	// rescale into count units instead of 0 to 1 units
-	q = float64(cs.countTotal) * q
+	q = float64(d.countTotal) * q
 	// find the first centroid which straddles q
 	var (
 		qTotal float64 = 0
 		i      int
 	)
-	for i = 0; i < n && float64(cs.centroids[i].count)/2+qTotal < q; i++ {
-		qTotal += float64(cs.centroids[i].count)
+	for i = 0; i < n && float64(d.centroids[i].count)/2+qTotal < q; i++ {
+		qTotal += float64(d.centroids[i].count)
 	}
 
 	if i == 0 {
 		// special case 1: the targeted quantile is before the
 		// left-most centroid. extrapolate from the slope from
 		// centroid0 to centroid1.
-		c0 := cs.centroids[0]
-		c1 := cs.centroids[1]
+		c0 := d.centroids[0]
+		c1 := d.centroids[1]
 		slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
 		deltaQ := q - float64(c0.count)/2 // this is negative
 		return c0.mean + slope*deltaQ
@@ -273,15 +273,15 @@ func (cs *TDigest) Quantile(q float64) float64 {
 		// special case 2: the targeted quantile is from the
 		// right-most centroid. extrapolate from the slope at the
 		// right edge.
-		c0 := cs.centroids[n-2]
-		c1 := cs.centroids[n-1]
+		c0 := d.centroids[n-2]
+		c1 := d.centroids[n-1]
 		slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
 		deltaQ := q - (qTotal - float64(c1.count)/2)
 		return c1.mean + slope*deltaQ
 	}
 	// common case: targeted quantile is between 2 centroids
-	c0 := cs.centroids[i-1]
-	c1 := cs.centroids[i]
+	c0 := d.centroids[i-1]
+	c1 := d.centroids[i]
 	slope := (c1.mean - c0.mean) / (float64(c1.count)/2 + float64(c0.count)/2)
 	deltaQ := q - (float64(c1.count)/2 + qTotal)
 	return c1.mean + slope*deltaQ
@@ -289,12 +289,12 @@ func (cs *TDigest) Quantile(q float64) float64 {
 
 // MergeInto(other) will add all of the data within a TDigest into other,
 // combining them into one larger TDigest.
-func (cs *TDigest) MergeInto(other *TDigest) {
-	// Add each centroid in cs into other. They should be added in
+func (d *TDigest) MergeInto(other *TDigest) {
+	// Add each centroid in d into other. They should be added in
 	// random order.
-	addOrder := rand.Perm(len(cs.centroids))
+	addOrder := rand.Perm(len(d.centroids))
 	for _, idx := range addOrder {
-		c := cs.centroids[idx]
+		c := d.centroids[idx]
 		// gradually write up the volume written so that the tdigest doesnt overload early
 		added := int64(0)
 		for i := int64(1); i < 10; i++ {
