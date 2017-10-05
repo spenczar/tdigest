@@ -191,7 +191,7 @@ func TestQuantile(t *testing.T) {
 func TestAddValue(t *testing.T) {
 	type testcase struct {
 		value  float64
-		weight int64
+		weight int
 		want   []*centroid
 	}
 

@@ -184,7 +184,11 @@ func (d *TDigest) addNewCentroid(mean float64, weight int64) {
 // Add will add a value to the TDigest, updating all quantiles. A
 // weight can be specified; use weight of 1 if you don't care about
 // weighting your dataset.
-func (d *TDigest) Add(val float64, weight int64) {
+func (d *TDigest) Add(val float64, weight int) {
+	d.add(val, int64(weight))
+}
+
+func (d *TDigest) add(val float64, weight int64) {
 	d.countTotal += weight
 	var idx = d.findAddTarget(val)
 
@@ -210,12 +214,11 @@ func (d *TDigest) Add(val float64, weight int64) {
 		c.count += add
 		c.mean = c.mean + float64(add)*(val-c.mean)/float64(c.count)
 
-		d.Add(val, remainder)
+		d.add(val, remainder)
 	} else {
 		c.count += weight
 		c.mean = c.mean + float64(weight)*(val-c.mean)/float64(c.count)
 	}
-
 }
 
 // returns the approximate quantile that a particular centroid
@@ -302,16 +305,16 @@ func (d *TDigest) MergeInto(other *TDigest) {
 			if added+i > c.count {
 				toAdd = c.count - added
 			}
-			other.Add(c.mean, toAdd)
+			other.add(c.mean, toAdd)
 			added += toAdd
 			if added >= c.count {
 				break
 			}
 		}
 		if added < c.count {
-			other.Add(c.mean, c.count-added)
+			other.add(c.mean, c.count-added)
 		}
-		other.Add(c.mean, c.count)
+		other.add(c.mean, c.count)
 	}
 }
 
