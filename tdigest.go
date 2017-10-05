@@ -1,11 +1,7 @@
 package tdigest
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
-
 	"math"
 	"math/rand"
 )
@@ -13,7 +9,7 @@ import (
 // centroid is a simple container for a mean,count pair.
 type centroid struct {
 	mean  float64
-	count int
+	count int64
 }
 
 func (c *centroid) String() string {
@@ -25,7 +21,7 @@ func (c *centroid) String() string {
 type TDigest struct {
 	centroids   []*centroid
 	compression float64
-	countTotal  int
+	countTotal  int64
 }
 
 // New produces a new TDigest using the default compression level of
@@ -89,10 +85,10 @@ func (d *TDigest) nearest(val float64) []int {
 }
 
 // returns the maximum weight that can be placed at specified index
-func (d *TDigest) weightLimit(idx int) int {
+func (d *TDigest) weightLimit(idx int) int64 {
 	ptile := d.quantileOf(idx)
-	limit := int(4 * d.compression * ptile * (1 - ptile) * float64(len(d.centroids)))
-	return limit
+	limit := float64(4 * d.compression * ptile * (1 - ptile) * float64(len(d.centroids)))
+	return int64(limit)
 }
 
 // checks whether the centroid has room for more weight
@@ -169,7 +165,7 @@ func (d *TDigest) findAddTarget(val float64) int {
 	return eligible[rand.Intn(len(eligible))]
 }
 
-func (d *TDigest) addNewCentroid(mean float64, weight int) {
+func (d *TDigest) addNewCentroid(mean float64, weight int64) {
 	var idx int = len(d.centroids)
 
 	for i, c := range d.centroids {
@@ -188,7 +184,7 @@ func (d *TDigest) addNewCentroid(mean float64, weight int) {
 // Add will add a value to the TDigest, updating all quantiles. A
 // weight can be specified; use weight of 1 if you don't care about
 // weighting your dataset.
-func (d *TDigest) Add(val float64, weight int) {
+func (d *TDigest) Add(val float64, weight int64) {
 	d.countTotal += weight
 	var idx = d.findAddTarget(val)
 
@@ -225,7 +221,7 @@ func (d *TDigest) Add(val float64, weight int) {
 // returns the approximate quantile that a particular centroid
 // represents
 func (d *TDigest) quantileOf(idx int) float64 {
-	total := 0
+	total := int64(0)
 	for _, c := range d.centroids[:idx] {
 		total += c.count
 	}
@@ -234,7 +230,7 @@ func (d *TDigest) quantileOf(idx int) float64 {
 
 // Quantile returns an estimate estimate the qth quantile value of the dataset.
 // The input value of q should be in the range [0.0, 1.0]; if it is outside that
-// range, it will be clipped into it automatically.
+
 func (d *TDigest) Quantile(q float64) float64 {
 	var n = len(d.centroids)
 	if n == 0 {
@@ -293,16 +289,17 @@ func (d *TDigest) Quantile(q float64) float64 {
 // combining them into one larger TDigest.
 func (d *TDigest) MergeInto(other *TDigest) {
 	// Add each centroid in d into other. They should be added in
-	// random order.
+	// order of decreasing weight.
 	addOrder := rand.Perm(len(d.centroids))
 	for _, idx := range addOrder {
 		c := d.centroids[idx]
+		log.Printf("adding %+v", c)
 		// gradually write up the volume written so that the tdigest doesnt overload
 		// early
-		added := 0
-		for i := 1; i < 10; i++ {
+		added := int64(0)
+		for i := int64(1); i < 10; i++ {
 			toAdd := i * 2
-			if added+i > c.count {
+			if added+toAdd > c.count {
 				toAdd = c.count - added
 			}
 			other.Add(c.mean, toAdd)
@@ -322,96 +319,11 @@ func (d *TDigest) MergeInto(other *TDigest) {
 // implementration at github.com/tdunning/t-digest. The encoded bytes can be
 // read back out with UnmarshalBinary.
 func (d *TDigest) MarshalBinary() ([]byte, error) {
-	buf := bytes.NewBuffer(nil)
-	w := &stickyErrWriter{w: buf, err: nil}
-	binary.Write(w, binary.LittleEndian, int32(1))
-
-	var min, max float64
-	if len(d.centroids) > 0 {
-		min = d.centroids[0].mean
-		max = d.centroids[len(d.centroids)-1].mean
-	}
-
-	binary.Write(w, binary.LittleEndian, min)
-	binary.Write(w, binary.LittleEndian, max)
-	binary.Write(w, binary.LittleEndian, float64(d.compression))
-	binary.Write(w, binary.LittleEndian, int32(len(d.centroids)))
-	if w.err != nil {
-		return nil, w.err
-	}
-	for _, c := range d.centroids {
-		binary.Write(w, binary.LittleEndian, int64(c.count))
-		binary.Write(w, binary.LittleEndian, float64(c.mean))
-	}
-	if w.err != nil {
-		return nil, w.err
-	}
-	return buf.Bytes(), nil
+	return marshalBinary(d)
 }
 
 // UnmarshalBinary unpacks the given bytes as a TDigest, using the same format
 // as MarshalBinary.
 func (d *TDigest) UnmarshalBinary(p []byte) error {
-	var (
-		encodingVersion int32
-		min, max        float64
-		n               int32
-	)
-	r := &stickyErrReader{r: bytes.NewReader(p), err: nil}
-
-	binary.Read(r, binary.LittleEndian, &encodingVersion)
-	if encodingVersion != 1 {
-		return fmt.Errorf("invalid encoding version: %d", encodingVersion)
-	}
-
-	binary.Read(r, binary.LittleEndian, &min)
-	binary.Read(r, binary.LittleEndian, &max)
-	binary.Read(r, binary.LittleEndian, &d.compression)
-	binary.Read(r, binary.LittleEndian, &n)
-	if r.err != nil {
-		return r.err
-	}
-
-	d.centroids = make([]*centroid, int(n))
-	for i := 0; i < int(n); i++ {
-		var (
-			count int64
-			mean  float64
-		)
-		binary.Read(r, binary.LittleEndian, &count)
-		binary.Read(r, binary.LittleEndian, &mean)
-		if r.err != nil {
-			return r.err
-		}
-		d.centroids[i] = &centroid{count: int(count), mean: mean}
-		d.countTotal += int(count)
-	}
-
-	return r.err
-}
-
-type stickyErrWriter struct {
-	w   io.Writer
-	err error
-}
-
-func (sew *stickyErrWriter) Write(p []byte) (n int, err error) {
-	if sew.err != nil {
-		return 0, sew.err
-	}
-	n, sew.err = sew.w.Write(p)
-	return n, sew.err
-}
-
-type stickyErrReader struct {
-	r   io.Reader
-	err error
-}
-
-func (ser *stickyErrReader) Read(p []byte) (n int, err error) {
-	if ser.err != nil {
-		return 0, ser.err
-	}
-	n, ser.err = ser.r.Read(p)
-	return n, ser.err
+	return unmarshalBinary(d, p)
 }
