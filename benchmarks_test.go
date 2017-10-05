@@ -14,16 +14,16 @@ type valueSource interface {
 func benchmarkAdd(b *testing.B, n int, src valueSource) {
 	valsToAdd := make([]float64, n)
 
-	d := NewWithCompression(100)
+	cset := newCentroidSet(100)
 	for i := 0; i < n; i++ {
 		v := src.Next()
 		valsToAdd[i] = v
-		d.Add(v, 1)
+		cset.Add(v, 1)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		d.Add(valsToAdd[i%n], 1)
+		cset.Add(valsToAdd[i%n], 1)
 	}
 	b.StopTimer()
 }
@@ -31,16 +31,16 @@ func benchmarkAdd(b *testing.B, n int, src valueSource) {
 func benchmarkQuantile(b *testing.B, n int, src valueSource) {
 	quantilesToCheck := make([]float64, n)
 
-	d := NewWithCompression(100)
+	cset := newCentroidSet(100)
 	for i := 0; i < n; i++ {
 		v := src.Next()
 		quantilesToCheck[i] = v
-		d.Add(v, 1)
+		cset.Add(v, 1)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = d.Quantile(quantilesToCheck[i%n])
+		_ = cset.Quantile(quantilesToCheck[i%n])
 	}
 	b.StopTimer()
 }
