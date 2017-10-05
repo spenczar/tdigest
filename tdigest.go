@@ -22,7 +22,7 @@ import (
 // MergeInto(other) will add all of the data within a TDigest into
 // other, combining them into one larger TDigest.
 type TDigest interface {
-	Add(val float64, weight int)
+	Add(val float64, weight int64)
 	Quantile(q float64) (val float64)
 	MergeInto(other TDigest)
 }
@@ -50,7 +50,7 @@ func NewWithCompression(compression float64) TDigest {
 // centroid is a simple container for a mean,count pair.
 type centroid struct {
 	mean  float64
-	count int
+	count int64
 }
 
 func (c *centroid) String() string {
@@ -60,7 +60,7 @@ func (c *centroid) String() string {
 type centroidSet struct {
 	centroids   []*centroid
 	compression float64
-	countTotal  int
+	countTotal  int64
 
 	reclusterAt int
 }
@@ -110,9 +110,9 @@ func (cs *centroidSet) nearest(val float64) []int {
 }
 
 // returns the maximum weight that can be placed at specified index
-func (cs *centroidSet) weightLimit(idx int) int {
+func (cs *centroidSet) weightLimit(idx int) int64 {
 	ptile := cs.quantileOf(idx)
-	limit := int(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
+	limit := int64(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
 	return limit
 }
 
@@ -190,7 +190,7 @@ func (cs *centroidSet) findAddTarget(val float64) int {
 	return eligible[rand.Intn(len(eligible))]
 }
 
-func (cs *centroidSet) addNewCentroid(mean float64, weight int) {
+func (cs *centroidSet) addNewCentroid(mean float64, weight int64) {
 	var idx int = len(cs.centroids)
 
 	for i, c := range cs.centroids {
@@ -207,7 +207,7 @@ func (cs *centroidSet) addNewCentroid(mean float64, weight int) {
 }
 
 // Add a value to the centroidSet.
-func (cs *centroidSet) Add(val float64, weight int) {
+func (cs *centroidSet) Add(val float64, weight int64) {
 	cs.countTotal += weight
 	var idx = cs.findAddTarget(val)
 
@@ -244,7 +244,7 @@ func (cs *centroidSet) Add(val float64, weight int) {
 // returns the approximate quantile that a particular centroid
 // represents
 func (cs *centroidSet) quantileOf(idx int) float64 {
-	total := 0
+	var total int64
 	for _, c := range cs.centroids[:idx] {
 		total += c.count
 	}
@@ -314,8 +314,8 @@ func (cs *centroidSet) MergeInto(other TDigest) {
 	for _, idx := range addOrder {
 		c := cs.centroids[idx]
 		// gradually write up the volume written so that the tdigest doesnt overload early
-		added := 0
-		for i := 1; i < 10; i++ {
+		added := int64(0)
+		for i := int64(1); i < 10; i++ {
 			toAdd := i * 2
 			if added+i > c.count {
 				toAdd = c.count - added
