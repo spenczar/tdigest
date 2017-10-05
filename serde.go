@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 )
 
 const (
@@ -39,11 +40,11 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 	r := &binaryReader{r: bytes.NewReader(p)}
 	r.readValue(&mv)
 	if mv != magic {
-		return fmt.Errorf("invalid header magic value, data might be corrupted: %d", mv)
+		return fmt.Errorf("data corruption detected: invalid header magic value %d", mv)
 	}
 	r.readValue(&ev)
 	if ev != encodingVersion {
-		return fmt.Errorf("invalid encoding version: %d", ev)
+		return fmt.Errorf("data corruption detected: invalid encoding version %d", ev)
 	}
 	r.readValue(&d.compression)
 	r.readValue(&n)
@@ -51,7 +52,7 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 		return r.err
 	}
 	if n < 0 {
-		return fmt.Errorf("invalid n, cannot be negative: %v", n)
+		return fmt.Errorf("data corruption detected: number of centroids cannot be negative, have %v", n)
 	}
 	if n > 1<<20 {
 		return fmt.Errorf("invalid n, cannot be greater than 2^20: %v", n)
@@ -64,7 +65,19 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 		if r.err != nil {
 			return r.err
 		}
+		if c.count < 0 {
+			return fmt.Errorf("data corruption detected: negative count: %d", c.count)
+		}
+		if i > 0 {
+			prev := d.centroids[i-1]
+			if c.mean < prev.mean {
+				return fmt.Errorf("data corruption detected: centroid %d has lower mean (%v) than preceding centroid %d (%v)", i, c.mean, i-1, prev.mean)
+			}
+		}
 		d.centroids[i] = c
+		if c.count > math.MaxInt64-d.countTotal {
+			return fmt.Errorf("data corruption detected: centroid total size overflow")
+		}
 		d.countTotal += c.count
 	}
 
