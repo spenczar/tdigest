@@ -53,6 +53,12 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 	if r.err != nil {
 		return r.err
 	}
+	if n < 0 {
+		return fmt.Errorf("invalid n, cannot be negative: %v", n)
+	}
+	if n > 1<<20 {
+		return fmt.Errorf("invalid n, cannot be greater than 2^20: %v", n)
+	}
 	d.centroids = make([]*centroid, int(n))
 	for i := 0; i < int(n); i++ {
 		c := new(centroid)
