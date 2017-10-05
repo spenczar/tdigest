@@ -14,7 +14,7 @@ type valueSource interface {
 func benchmarkAdd(b *testing.B, n int, src valueSource) {
 	valsToAdd := make([]float64, n)
 
-	cset := newCentroidSet(100)
+	cset := NewWithCompression(100)
 	for i := 0; i < n; i++ {
 		v := src.Next()
 		valsToAdd[i] = v
@@ -31,7 +31,7 @@ func benchmarkAdd(b *testing.B, n int, src valueSource) {
 func benchmarkQuantile(b *testing.B, n int, src valueSource) {
 	quantilesToCheck := make([]float64, n)
 
-	cset := newCentroidSet(100)
+	cset := NewWithCompression(100)
 	for i := 0; i < n; i++ {
 		v := src.Next()
 		quantilesToCheck[i] = v

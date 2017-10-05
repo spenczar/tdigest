@@ -6,30 +6,27 @@ import (
 	"math/rand"
 )
 
-// A TDigest is an efficient data structure for computing streaming
-// approximate quantiles of a dataset. It supports two methods:
-//
-// Add will add a value to the TDigest, updating all quantiles. A
-// weight can be specified; use weight of 1 if you don't care about
-// weighting your dataset.
-//
-// Quantile(q) will estimate the qth quantile value of the
-// dataset. The input value of q should be in the range [0.0, 1.0]; if
-// it is outside that range, it will be clipped into it automatically.
-//
-// Calling Quantile on a TDigest with no data should return NaN.
-//
-// MergeInto(other) will add all of the data within a TDigest into
-// other, combining them into one larger TDigest.
-type TDigest interface {
-	Add(val float64, weight int64)
-	Quantile(q float64) (val float64)
-	MergeInto(other TDigest)
+// centroid is a simple container for a mean,count pair.
+type centroid struct {
+	mean  float64
+	count int64
+}
+
+func (c *centroid) String() string {
+	return fmt.Sprintf("c{%f x%d}", c.mean, c.count)
+}
+
+// A TDigest is an efficient data structure for computing streaming approximate
+// quantiles of a dataset.
+type TDigest struct {
+	centroids   []*centroid
+	compression float64
+	countTotal  int64
 }
 
 // New produces a new TDigest using the default compression level of
 // 100.
-func New() TDigest {
+func New() *TDigest {
 	return NewWithCompression(100)
 }
 
@@ -43,28 +40,8 @@ func New() TDigest {
 // small (think like 1e-6 percentile points) errors at extreme points
 // in the distribution, and compression ratios of around 500 for large
 // data sets (1 millionish datapoints).
-func NewWithCompression(compression float64) TDigest {
-	return newCentroidSet(compression)
-}
-
-// centroid is a simple container for a mean,count pair.
-type centroid struct {
-	mean  float64
-	count int64
-}
-
-func (c *centroid) String() string {
-	return fmt.Sprintf("c{%f x%d}", c.mean, c.count)
-}
-
-type centroidSet struct {
-	centroids   []*centroid
-	compression float64
-	countTotal  int64
-}
-
-func newCentroidSet(compression float64) *centroidSet {
-	return &centroidSet{
+func NewWithCompression(compression float64) *TDigest {
+	return &TDigest{
 		centroids:   make([]*centroid, 0),
 		compression: compression,
 		countTotal:  0,
@@ -75,7 +52,7 @@ func newCentroidSet(compression float64) *centroidSet {
 // input value.
 //
 // TODO: Use a better data structure to avoid this loop.
-func (cs *centroidSet) nearest(val float64) []int {
+func (cs *TDigest) nearest(val float64) []int {
 	var (
 		nearestDist float64 = math.Inf(+1)
 		thisDist    float64
@@ -108,19 +85,19 @@ func (cs *centroidSet) nearest(val float64) []int {
 }
 
 // returns the maximum weight that can be placed at specified index
-func (cs *centroidSet) weightLimit(idx int) int64 {
+func (cs *TDigest) weightLimit(idx int) int64 {
 	ptile := cs.quantileOf(idx)
 	limit := int64(4 * cs.compression * ptile * (1 - ptile) * float64(len(cs.centroids)))
 	return limit
 }
 
 // checks whether the centroid has room for more weight
-func (cs *centroidSet) centroidHasRoom(idx int) bool {
+func (cs *TDigest) centroidHasRoom(idx int) bool {
 	return cs.centroids[idx].count < cs.weightLimit(idx)
 }
 
 // find which centroid to add the value to (by index)
-func (cs *centroidSet) findAddTarget(val float64) int {
+func (cs *TDigest) findAddTarget(val float64) int {
 	var (
 		nearest  []int = cs.nearest(val)
 		eligible []int
@@ -188,7 +165,7 @@ func (cs *centroidSet) findAddTarget(val float64) int {
 	return eligible[rand.Intn(len(eligible))]
 }
 
-func (cs *centroidSet) addNewCentroid(mean float64, weight int64) {
+func (cs *TDigest) addNewCentroid(mean float64, weight int64) {
 	var idx int = len(cs.centroids)
 
 	for i, c := range cs.centroids {
@@ -204,8 +181,10 @@ func (cs *centroidSet) addNewCentroid(mean float64, weight int64) {
 	cs.centroids[idx] = &centroid{mean, weight}
 }
 
-// Add a value to the centroidSet.
-func (cs *centroidSet) Add(val float64, weight int64) {
+// Add will add a value to the TDigest, updating all quantiles. A
+// weight can be specified; use weight of 1 if you don't care about
+// weighting your dataset.
+func (cs *TDigest) Add(val float64, weight int64) {
 	cs.countTotal += weight
 	var idx = cs.findAddTarget(val)
 
@@ -241,7 +220,7 @@ func (cs *centroidSet) Add(val float64, weight int64) {
 
 // returns the approximate quantile that a particular centroid
 // represents
-func (cs *centroidSet) quantileOf(idx int) float64 {
+func (cs *TDigest) quantileOf(idx int) float64 {
 	var total int64
 	for _, c := range cs.centroids[:idx] {
 		total += c.count
@@ -249,9 +228,12 @@ func (cs *centroidSet) quantileOf(idx int) float64 {
 	return (float64(cs.centroids[idx].count/2) + float64(total)) / float64(cs.countTotal)
 }
 
-// Quantile returns the approximate value at a quantile (eg the 99th
-// percentile value would be centroidSet.quantileValue(0.99))
-func (cs *centroidSet) Quantile(q float64) float64 {
+// Quantile(q) will estimate the qth quantile value of the dataset. The input
+// value of q should be in the range [0.0, 1.0]; if it is outside that range, it
+// will be clipped into it automatically.
+//
+// Calling Quantile on a TDigest with no data will return NaN.
+func (cs *TDigest) Quantile(q float64) float64 {
 	var n = len(cs.centroids)
 	if n == 0 {
 		return math.NaN()
@@ -305,7 +287,9 @@ func (cs *centroidSet) Quantile(q float64) float64 {
 	return c1.mean + slope*deltaQ
 }
 
-func (cs *centroidSet) MergeInto(other TDigest) {
+// MergeInto(other) will add all of the data within a TDigest into other,
+// combining them into one larger TDigest.
+func (cs *TDigest) MergeInto(other *TDigest) {
 	// Add each centroid in cs into other. They should be added in
 	// random order.
 	addOrder := rand.Perm(len(cs.centroids))

@@ -26,15 +26,15 @@ func TestFindNearest(t *testing.T) {
 	}
 
 	for i, tc := range testcases {
-		cs := centroidSet{centroids: tc.centroids}
+		cs := TDigest{centroids: tc.centroids}
 		have := cs.nearest(tc.val)
 		if len(tc.want) == 0 {
 			if len(have) != 0 {
-				t.Errorf("centroidSet.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
+				t.Errorf("TDigest.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
 			}
 		} else {
 			if !reflect.DeepEqual(tc.want, have) {
-				t.Errorf("centroidSet.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
+				t.Errorf("TDigest.nearest wrong test=%d, have=%v, want=%v", i, have, tc.want)
 			}
 		}
 	}
@@ -63,10 +63,10 @@ func TestFindAddTarget(t *testing.T) {
 		{[]*centroid{}, 1, -1},
 	}
 	for i, tc := range testcases {
-		cs := centroidSet{centroids: tc.centroids, countTotal: int64(len(tc.centroids))}
+		cs := TDigest{centroids: tc.centroids, countTotal: int64(len(tc.centroids))}
 		have := cs.findAddTarget(tc.val)
 		if have != tc.want {
-			t.Errorf("centroidSet.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
+			t.Errorf("TDigest.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
 		}
 	}
 }
@@ -97,12 +97,12 @@ func TestAddNewCentroid(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(tc.want, have) {
-			t.Errorf("centroidSet.addNewCentroid wrong test=%d, have=%v, want=%v", i, have, tc.want)
+			t.Errorf("TDigest.addNewCentroid wrong test=%d, have=%v, want=%v", i, have, tc.want)
 		}
 	}
 }
 
-func verifyCentroidOrder(t *testing.T, cs *centroidSet) {
+func verifyCentroidOrder(t *testing.T, cs *TDigest) {
 	if len(cs.centroids) < 2 {
 		return
 	}
@@ -119,7 +119,7 @@ func TestQuantileOrder(t *testing.T) {
 	// stumbled upon in real world application: adding a 1 to this
 	// resulted in the 6th centroid getting incremented instead of the
 	// 7th.
-	cset := &centroidSet{
+	cset := &TDigest{
 		countTotal:  14182,
 		compression: 100,
 		centroids: []*centroid{
@@ -183,7 +183,7 @@ func TestQuantile(t *testing.T) {
 		cset := csetFromWeights(tc.weights)
 		have := cset.quantileOf(tc.idx)
 		if have != tc.want {
-			t.Errorf("centroidSet.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
+			t.Errorf("TDigest.quantile wrong test=%d, have=%.3f, want=%.3f", i, have, tc.want)
 		}
 	}
 }
@@ -203,17 +203,17 @@ func TestAddValue(t *testing.T) {
 		{4.0, 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
 	}
 
-	cset := newCentroidSet(1)
+	cset := NewWithCompression(1)
 	for i, tc := range testcases {
 		cset.Add(tc.value, tc.weight)
 		if !reflect.DeepEqual(cset.centroids, tc.want) {
-			t.Fatalf("centroidSet.addValue unexpected state step=%d, have=%v, want=%v", i, cset.centroids, tc.want)
+			t.Fatalf("TDigest.addValue unexpected state step=%d, have=%v, want=%v", i, cset.centroids, tc.want)
 		}
 	}
 }
 
 func TestQuantileValue(t *testing.T) {
-	cset := newCentroidSet(1)
+	cset := NewWithCompression(1)
 	cset.countTotal = 8
 	cset.centroids = []*centroid{{0.5, 3}, {1, 1}, {2, 2}, {3, 1}, {8, 1}}
 
@@ -242,7 +242,7 @@ func TestQuantileValue(t *testing.T) {
 	for i, tc := range testcases {
 		have := cset.Quantile(tc.q)
 		if math.Abs(have-tc.want) > epsilon {
-			t.Errorf("centroidSet.Quantile wrong step=%d, have=%v, want=%v",
+			t.Errorf("TDigest.Quantile wrong step=%d, have=%v, want=%v",
 				i, have, tc.want)
 		}
 	}
@@ -261,33 +261,33 @@ func BenchmarkFindAddTarget(b *testing.B) {
 }
 
 // add the values [0,n) to a centroid set, equal weights
-func simpleCentroidSet(n int) *centroidSet {
-	cset := newCentroidSet(1.0)
+func simpleCentroidSet(n int) *TDigest {
+	cset := NewWithCompression(1.0)
 	for i := 0; i < n; i++ {
 		cset.Add(float64(i), 1)
 	}
 	return cset
 }
 
-func csetFromMeans(means []float64) *centroidSet {
+func csetFromMeans(means []float64) *TDigest {
 	centroids := make([]*centroid, len(means))
 	for i, m := range means {
 		centroids[i] = &centroid{m, 1}
 	}
-	cset := newCentroidSet(1.0)
+	cset := NewWithCompression(1.0)
 	cset.centroids = centroids
 	cset.countTotal = int64(len(centroids))
 	return cset
 }
 
-func csetFromWeights(weights []int64) *centroidSet {
+func csetFromWeights(weights []int64) *TDigest {
 	centroids := make([]*centroid, len(weights))
 	countTotal := int64(0)
 	for i, w := range weights {
 		centroids[i] = &centroid{float64(i), w}
 		countTotal += w
 	}
-	cset := newCentroidSet(1.0)
+	cset := NewWithCompression(1.0)
 	cset.centroids = centroids
 	cset.countTotal = countTotal
 	return cset
