@@ -46,7 +46,7 @@ func BenchmarkFindNearest(b *testing.B) {
 
 	b.ResetTimer()
 	var val float64
-	for i := 0; i < b.N; i++ {
+	for i := int64(0); i < int64(b.N); i++ {
 		val = float64(i % d.countTotal)
 		_ = d.nearest(val)
 	}
@@ -63,7 +63,7 @@ func TestFindAddTarget(t *testing.T) {
 		{[]*centroid{}, 1, -1},
 	}
 	for i, tc := range testcases {
-		cs := TDigest{centroids: tc.centroids, countTotal: len(tc.centroids)}
+		cs := TDigest{centroids: tc.centroids, countTotal: int64(len(tc.centroids))}
 		have := cs.findAddTarget(tc.val)
 		if have != tc.want {
 			t.Errorf("TDigest.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
@@ -158,25 +158,25 @@ func TestQuantileOrder(t *testing.T) {
 
 func TestQuantile(t *testing.T) {
 	type testcase struct {
-		weights []int
+		weights []int64
 		idx     int
 		want    float64
 	}
 	testcases := []testcase{
-		{[]int{1, 1, 1, 1}, 0, 0.0},
-		{[]int{1, 1, 1, 1}, 1, 0.25},
-		{[]int{1, 1, 1, 1}, 2, 0.5},
-		{[]int{1, 1, 1, 1}, 3, 0.75},
+		{[]int64{1, 1, 1, 1}, 0, 0.0},
+		{[]int64{1, 1, 1, 1}, 1, 0.25},
+		{[]int64{1, 1, 1, 1}, 2, 0.5},
+		{[]int64{1, 1, 1, 1}, 3, 0.75},
 
-		{[]int{5, 1, 1, 1}, 0, 0.250},
-		{[]int{5, 1, 1, 1}, 1, 0.625},
-		{[]int{5, 1, 1, 1}, 2, 0.750},
-		{[]int{5, 1, 1, 1}, 3, 0.875},
+		{[]int64{5, 1, 1, 1}, 0, 0.250},
+		{[]int64{5, 1, 1, 1}, 1, 0.625},
+		{[]int64{5, 1, 1, 1}, 2, 0.750},
+		{[]int64{5, 1, 1, 1}, 3, 0.875},
 
-		{[]int{1, 1, 1, 5}, 0, 0.0},
-		{[]int{1, 1, 1, 5}, 1, 0.125},
-		{[]int{1, 1, 1, 5}, 2, 0.250},
-		{[]int{1, 1, 1, 5}, 3, 0.625},
+		{[]int64{1, 1, 1, 5}, 0, 0.0},
+		{[]int64{1, 1, 1, 5}, 1, 0.125},
+		{[]int64{1, 1, 1, 5}, 2, 0.250},
+		{[]int64{1, 1, 1, 5}, 3, 0.625},
 	}
 
 	for i, tc := range testcases {
@@ -191,7 +191,7 @@ func TestQuantile(t *testing.T) {
 func TestAddValue(t *testing.T) {
 	type testcase struct {
 		value  float64
-		weight int
+		weight int64
 		want   []*centroid
 	}
 
@@ -254,7 +254,7 @@ func BenchmarkFindAddTarget(b *testing.B) {
 
 	b.ResetTimer()
 	var val float64
-	for i := 0; i < b.N; i++ {
+	for i := int64(0); i < int64(b.N); i++ {
 		val = float64(i % d.countTotal)
 		_ = d.findAddTarget(val)
 	}
@@ -276,13 +276,13 @@ func tdigestFromMeans(means []float64) *TDigest {
 	}
 	d := NewWithCompression(1.0)
 	d.centroids = centroids
-	d.countTotal = len(centroids)
+	d.countTotal = int64(len(centroids))
 	return d
 }
 
-func tdigestFromWeights(weights []int) *TDigest {
+func tdigestFromWeights(weights []int64) *TDigest {
 	centroids := make([]*centroid, len(weights))
-	countTotal := 0
+	countTotal := int64(0)
 	for i, w := range weights {
 		centroids[i] = &centroid{float64(i), w}
 		countTotal += w
