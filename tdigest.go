@@ -61,8 +61,6 @@ type centroidSet struct {
 	centroids   []*centroid
 	compression float64
 	countTotal  int64
-
-	reclusterAt int
 }
 
 func newCentroidSet(compression float64) *centroidSet {
