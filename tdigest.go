@@ -314,3 +314,15 @@ func (d *TDigest) MergeInto(other *TDigest) {
 		other.Add(c.mean, c.count)
 	}
 }
+
+// MarshalBinary serializes d as a sequence of bytes, suitable to be
+// deserialized later with UnmarshalBinary.
+func (d *TDigest) MarshalBinary() ([]byte, error) {
+	return marshalBinary(d)
+}
+
+// UnmarshalBinary populates d with the parsed contents of p, which should have
+// been created with a call to MarshalBinary.
+func (d *TDigest) UnmarshalBinary(p []byte) error {
+	return unmarshalBinary(d, p)
+}
