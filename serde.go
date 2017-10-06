@@ -39,10 +39,16 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 	)
 	r := &binaryReader{r: bytes.NewReader(p)}
 	r.readValue(&mv)
+	if r.err != nil {
+		return r.err
+	}
 	if mv != magic {
-		return fmt.Errorf("data corruption detected: invalid header magic value %d", mv)
+		return fmt.Errorf("data corruption detected: invalid header magic value 0x%04x", mv)
 	}
 	r.readValue(&ev)
+	if r.err != nil {
+		return r.err
+	}
 	if ev != encodingVersion {
 		return fmt.Errorf("data corruption detected: invalid encoding version %d", ev)
 	}
@@ -53,6 +59,7 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 	}
 	if n < 0 {
 		return fmt.Errorf("data corruption detected: number of centroids cannot be negative, have %v", n)
+
 	}
 	if n > 1<<20 {
 		return fmt.Errorf("invalid n, cannot be greater than 2^20: %v", n)
@@ -81,7 +88,11 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 		d.countTotal += c.count
 	}
 
-	return r.err
+	if n := r.r.Len(); n > 0 {
+		return fmt.Errorf("found %d unexpected bytes trailing the tdigest", n)
+	}
+
+	return nil
 }
 
 type binaryBufferWriter struct {
@@ -97,7 +108,7 @@ func (w *binaryBufferWriter) writeValue(v interface{}) {
 }
 
 type binaryReader struct {
-	r   io.Reader
+	r   *bytes.Reader
 	err error
 }
 
@@ -106,4 +117,7 @@ func (r *binaryReader) readValue(v interface{}) {
 		return
 	}
 	r.err = binary.Read(r.r, binary.LittleEndian, v)
+	if r.err == io.EOF {
+		r.err = io.ErrUnexpectedEOF
+	}
 }
