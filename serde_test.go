@@ -31,6 +31,12 @@ func TestMarshalRoundTrip(t *testing.T) {
 	t.Run("empty", testcase(New()))
 	t.Run("1 value", testcase(simpleTDigest(1)))
 	t.Run("1000 values", testcase(simpleTDigest(1000)))
+
+	d := New()
+	d.Add(1, 1)
+	d.Add(1, 1)
+	d.Add(0, 1)
+	t.Run("1, 1, 0 input", testcase(d))
 }
 
 func TestUnmarshalErrors(t *testing.T) {
