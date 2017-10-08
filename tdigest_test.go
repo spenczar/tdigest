@@ -53,22 +53,90 @@ func BenchmarkFindNearest(b *testing.B) {
 }
 
 func TestFindAddTarget(t *testing.T) {
-	type testcase struct {
-		centroids []*centroid
-		val       float64
-		want      int
-	}
-
-	testcases := []testcase{
-		{[]*centroid{}, 1, -1},
-	}
-	for i, tc := range testcases {
-		d := TDigest{centroids: tc.centroids, countTotal: int64(len(tc.centroids))}
-		have := d.findAddTarget(tc.val)
-		if have != tc.want {
-			t.Errorf("TDigest.findAddTarget wrong test=%d, have=%v, want=%v", i, have, tc.want)
+	testcase := func(in []*centroid, val float64, want int) func(*testing.T) {
+		return func(t *testing.T) {
+			d := TDigest{centroids: in, compression: 1}
+			for _, c := range in {
+				d.countTotal += c.count
+			}
+			have := d.findAddTarget(val)
+			if have != want {
+				t.Errorf("TDigest.findAddTarget wrong  have=%v, want=%v", have, want)
+			}
 		}
 	}
+	t.Run("empty digest", testcase(nil, 1, -1))
+	t.Run("exactly one with room", testcase(
+		[]*centroid{{0.0, 1}, {1.0, 1}, {2.0, 1}},
+		1, 1))
+	t.Run("exactly one without room", testcase(
+		[]*centroid{{0.0, 1}, {1.0, 3}, {2.0, 1}},
+		1, -1))
+	t.Run("multiple candidates", func(t *testing.T) {
+		t.Run("all lesser", func(t *testing.T) {
+			t.Run("with room", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 1}, {1.0, 3}, {2.0, 1}},
+				1.1, 2))
+			t.Run("without room", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 1}, {1.0, 4}, {2.0, 1}},
+				1.1, -1))
+		})
+		t.Run("all greater", func(t *testing.T) {
+			t.Run("with room", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 1}, {1.0, 3}, {2.0, 1}},
+				0.9, 1))
+			t.Run("without room", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 3}, {1.0, 4}, {2.0, 1}},
+				0.9, -1))
+		})
+		t.Run("all equal", func(t *testing.T) {
+			t.Run("with room in none", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 3}, {1.0, 3}, {2.0, 1}},
+				1.0, -1))
+			t.Run("with room in one", testcase(
+				[]*centroid{{0.0, 1}, {1.0, 2}, {1.0, 3}, {2.0, 1}},
+				1.0, 1))
+			t.Run("with room in multiple", func(t *testing.T) {
+				d := TDigest{
+					centroids:   []*centroid{{0.0, 1}, {1.0, 1}, {1.0, 2}, {2.0, 1}},
+					compression: 1,
+				}
+				for _, c := range d.centroids {
+					d.countTotal += c.count
+				}
+				have := d.findAddTarget(1.0)
+				if have != 1 && have != 2 {
+					t.Errorf("TDigest.findAddTarget wrong  have=%v, want=1 or 2", have)
+				}
+			})
+		})
+		t.Run("both greater and lesser", func(t *testing.T) {
+			t.Run("with room below", testcase(
+				[]*centroid{{0.0, 1}, {0.8, 1}, {0.8, 1}, {1.0, 6}, {1.0, 1}, {2.0, 1}},
+				0.9, 2))
+			t.Run("with room above", testcase(
+				[]*centroid{{0.0, 1}, {0.8, 1}, {0.8, 6}, {1.0, 1}, {1.0, 1}, {2.0, 1}},
+				0.9, 3))
+			t.Run("with no room", testcase(
+				[]*centroid{{0.0, 1}, {0.8, 1}, {0.8, 6}, {1.0, 6}, {1.0, 1}, {2.0, 1}},
+				0.9, -1))
+			t.Run("with room above and below", func(t *testing.T) {
+				d := TDigest{
+					centroids: []*centroid{
+						{0.0, 1}, {0.8, 1}, {0.8, 1},
+						{1.0, 1}, {1.0, 1}, {2.0, 1}},
+					compression: 1,
+				}
+				for _, c := range d.centroids {
+					d.countTotal += c.count
+				}
+				have := d.findAddTarget(0.9)
+				if have != 2 && have != 3 {
+					t.Errorf("TDigest.findAddTarget wrong  have=%v, want=2 or 3", have)
+				}
+			})
+		})
+	})
 }
 
 // adding a new centroid should maintain sorted order

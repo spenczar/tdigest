@@ -98,71 +98,112 @@ func (d *TDigest) centroidHasRoom(idx int) bool {
 
 // find which centroid to add the value to (by index)
 func (d *TDigest) findAddTarget(val float64) int {
-	var (
-		nearest  []int = d.nearest(val)
-		eligible []int
-	)
-
-	for _, c := range nearest {
-		// if there is room for more weight at this centroid...
-		if d.centroidHasRoom(c) {
-			eligible = append(eligible, c)
-		}
-	}
-
-	if len(eligible) == 0 {
+	nearest := d.nearest(val)
+	// There could be no centroids yet, one centroid which is the 'nearest', or
+	// multiple centroids that are equidistant.
+	switch len(nearest) {
+	case 0:
+		// There are no centroids at all. Return -1, signaling that we should add a
+		// new centroid.
 		return -1
-	}
-	if len(eligible) == 1 {
-		return eligible[0]
-	}
-
-	// Multiple eligible centroids to add to. They must be equidistant
-	// from this value. Four cases are possible:
-	//
-	//   1. All eligible centroids' means are less than val
-	//   2. Some eligible centroids' means are less than val, some are greater
-	//   3. All eligible centroids' means are exactly equal to val
-	//   4. All eligible centroids' means are greater than val
-	//
-	// If 1, then we should take the highest indexed centroid to
-	// preserve ordering.  If 4, we should take the lowest for the
-	// same reason. If 2 or 3, we can pick randomly.
-
-	var anyLesser, anyGreater bool
-	for _, c := range eligible {
-		m := d.centroids[c].mean
-		if m < val {
-			anyLesser = true
-		} else if m > val {
-			anyGreater = true
+	case 1:
+		// When there is exactly one centroid which is the 'nearest' one, return it
+		// if it has room.
+		if d.centroidHasRoom(nearest[0]) {
+			return nearest[0]
 		}
-	}
+		return -1
+	default:
+		// Multiple eligible centroids to add to. They must be equidistant
+		// from this value. Four cases are possible:
+		//
+		//   1. All eligible centroids' means are less than val
+		//   2. All eligible centroids' means are greater than val
+		//   3. All eligible centroids' means are exactly equal to val
+		//   4. Some eligible centroids' means are less than val, some are greater
+		//
+		// If 1, then we should take the highest indexed centroid to preserve
+		// ordering. If 2, we should take the lowest for the same reason. If 2, we
+		// can pick randomly among the ones that have room, since they are
+		// indistinguishable. If 4, we should first trim down to having just 2
+		// eligible centroids and then can pick randomly.
 
-	// case 1: all are less, none are greater. Take highest one.
-	if anyLesser && !anyGreater {
-		greatest := eligible[0]
-		for _, c := range eligible[1:] {
-			if c > greatest {
-				greatest = c
+		// First, establish which of the 4 cases we have.
+		var anyLesser, anyGreater bool
+		for _, c := range nearest {
+			m := d.centroids[c].mean
+			if m < val {
+				anyLesser = true
+			} else if m > val {
+				anyGreater = true
 			}
 		}
-		return greatest
-	}
 
-	// case 4: all are greater, none are less. Take lowest one.
-	if !anyLesser && anyGreater {
-		least := eligible[0]
-		for _, c := range eligible[1:] {
-			if c < least {
-				least = c
+		switch {
+		case anyLesser && !anyGreater:
+			// case 1: all are less, none are greater. Take highest one.
+			c := max(nearest)
+			if d.centroidHasRoom(c) {
+				return c
+			}
+			return -1
+
+		case !anyLesser && anyGreater:
+			// case 2: all are greater, none are less. Take the lowest one.
+			c := min(nearest)
+			if d.centroidHasRoom(c) {
+				return c
+			}
+			return -1
+
+		case !anyLesser && !anyGreater:
+			// case 3: all are equal. Take a random one that has room.
+			var eligible []int
+			for _, c := range nearest {
+				if d.centroidHasRoom(c) {
+					eligible = append(eligible, c)
+				}
+			}
+			if len(eligible) == 0 {
+				return -1
+			}
+			if len(eligible) == 1 {
+				return eligible[0]
+			}
+			return eligible[rand.Intn(len(eligible))]
+
+		default:
+			// case 4: It's a mixed bag. We need to first trim down to the two
+			// innermost centroids which straddle the value.
+			var lower, upper int
+			for _, c := range nearest {
+				m := d.centroids[c].mean
+				if m < val {
+					lower = c
+				} else if m > val {
+					upper = c
+					break
+				}
+			}
+			// Now, check which has room. If both do, pick randomly.
+			lowerHasRoom := d.centroidHasRoom(lower)
+			upperHasRoom := d.centroidHasRoom(upper)
+			switch {
+			case !lowerHasRoom && !upperHasRoom:
+				return -1
+			case lowerHasRoom && !upperHasRoom:
+				return lower
+			case !lowerHasRoom && upperHasRoom:
+				return upper
+			default:
+				if rand.Intn(2) == 1 {
+					return lower
+				} else {
+					return upper
+				}
 			}
 		}
-		return least
 	}
-
-	// case 2 or 3: Anything else. Pick randomly.
-	return eligible[rand.Intn(len(eligible))]
 }
 
 func (d *TDigest) addNewCentroid(mean float64, weight int64) {
@@ -328,4 +369,31 @@ func (d *TDigest) MarshalBinary() ([]byte, error) {
 // been created with a call to MarshalBinary.
 func (d *TDigest) UnmarshalBinary(p []byte) error {
 	return unmarshalBinary(d, p)
+}
+
+func max(ii []int) int {
+	max := ii[0]
+	if len(ii) == 1 {
+		return max
+	}
+	for _, v := range ii[1:] {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
+func min(ii []int) int {
+	min := ii[0]
+	if len(ii) == 1 {
+		return min
+	}
+	for _, v := range ii[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+
 }
