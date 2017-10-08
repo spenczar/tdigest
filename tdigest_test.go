@@ -269,6 +269,9 @@ func TestAddValue(t *testing.T) {
 		{2.0, 1, []*centroid{{0, 1}, {1, 1}, {2, 1}}},
 		{3.0, 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}}},
 		{4.0, 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
+		{math.NaN(), 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
+		{math.Inf(-1), 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
+		{math.Inf(+1), 1, []*centroid{{0, 1}, {1, 1}, {2.5, 2}, {4, 1}}},
 	}
 
 	d := NewWithCompression(1)

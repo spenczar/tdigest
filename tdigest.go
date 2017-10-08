@@ -225,7 +225,12 @@ func (d *TDigest) addNewCentroid(mean float64, weight int64) {
 // Add will add a value to the TDigest, updating all quantiles. A
 // weight can be specified; use weight of 1 if you don't care about
 // weighting your dataset.
+//
+// Add will ignore input values of NaN or Inf.
 func (d *TDigest) Add(val float64, weight int) {
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return
+	}
 	d.add(val, int64(weight))
 }
 
