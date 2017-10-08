@@ -75,6 +75,12 @@ func unmarshalBinary(d *TDigest, p []byte) error {
 		if c.count < 0 {
 			return fmt.Errorf("data corruption detected: negative count: %d", c.count)
 		}
+		if math.IsNaN(c.mean) {
+			return fmt.Errorf("data corruption detected: NaN mean not permitted")
+		}
+		if math.IsInf(c.mean, 0) {
+			return fmt.Errorf("data corruption detected: Inf mean not permitted")
+		}
 		if i > 0 {
 			prev := d.centroids[i-1]
 			if c.mean < prev.mean {
