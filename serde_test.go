@@ -5,8 +5,6 @@ import (
 	"io"
 	"reflect"
 	"testing"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 func TestMarshalRoundTrip(t *testing.T) {
@@ -232,8 +230,8 @@ func TestUnmarshal(t *testing.T) {
 			}
 			if !reflect.DeepEqual(have, want) {
 				t.Error("unmarshal did not produce expected digest")
-				t.Logf("want=%s", spew.Sprint(want))
-				t.Logf("have=%s", spew.Sprint(have))
+				t.Logf("want=%s", want.debugStr())
+				t.Logf("have=%s", have.debugStr())
 			}
 		}
 	}
