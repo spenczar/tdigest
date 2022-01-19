@@ -376,6 +376,19 @@ func (d *TDigest) UnmarshalBinary(p []byte) error {
 	return unmarshalBinary(d, p)
 }
 
+// Render a TDigest's internal state for test logging output purposes.
+func (d *TDigest) debugStr() string {
+	var centroids = "[]*centroids{"
+
+	for _, c := range d.centroids {
+		centroids += fmt.Sprintf("&centroid{mean: %f, count: %d},", c.mean, c.count)
+	}
+	centroids += "}"
+
+	return fmt.Sprintf("TDigest{compression: %f, countTotal: %d, centroids: %s", d.compression, d.countTotal, centroids)
+
+}
+
 func max(ii []int) int {
 	max := ii[0]
 	if len(ii) == 1 {
