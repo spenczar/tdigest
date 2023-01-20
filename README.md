@@ -1,3 +1,9 @@
+# Archived Status #
+
+**I don't plan on making updates to this package. I recommend using https://github.com/influxdata/tdigest instead.**
+
+---
+
 # tdigest #
 [![GoDoc](https://godoc.org/github.com/spenczar/tdigest?status.svg)](https://godoc.org/github.com/spenczar/tdigest) [![Build Status](https://travis-ci.org/spenczar/tdigest.svg)](https://travis-ci.org/spenczar/tdigest)
 
